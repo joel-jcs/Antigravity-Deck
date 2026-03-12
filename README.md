@@ -219,6 +219,12 @@ AUTH_KEY=your-secret-key npm run dev
 
 ---
 
+## 🙏 Acknowledgments
+
+Thanks to the **Claudible** community for AI quota support and testing 💜
+
+---
+
 ## 📄 License
 
 MIT
