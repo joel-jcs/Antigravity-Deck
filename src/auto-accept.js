@@ -58,6 +58,18 @@ function validateFilePathInWorkspace(filePath) {
             }
         }
     }
+
+    // Fallback: include defaultWorkspaceRoot from settings
+    // (ensures validation works even before LS instances are detected)
+    const settings = getSettings();
+    if (settings.defaultWorkspaceRoot) {
+        try {
+            allowedRoots.push(fs.realpathSync(settings.defaultWorkspaceRoot));
+        } catch {
+            // Default root doesn't exist yet — add lexically
+            allowedRoots.push(path.resolve(settings.defaultWorkspaceRoot));
+        }
+    }
     
     if (allowedRoots.length === 0) {
         // No workspaces available - reject for safety

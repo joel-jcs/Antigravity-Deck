@@ -43,6 +43,14 @@ function loadSettings() {
     } catch {
         _settings = { ...DEFAULT_SETTINGS };
     }
+
+    // Auto-populate defaultWorkspaceRoot if empty/missing (new user onboarding)
+    if (!_settings.defaultWorkspaceRoot) {
+        _settings.defaultWorkspaceRoot = DEFAULT_SETTINGS.defaultWorkspaceRoot;
+        console.log(`[*] Auto-set defaultWorkspaceRoot: ${_settings.defaultWorkspaceRoot}`);
+        try { fs.writeFileSync(SETTINGS_PATH, JSON.stringify(_settings, null, 2), 'utf-8'); } catch { }
+    }
+
     return _settings;
 }
 
