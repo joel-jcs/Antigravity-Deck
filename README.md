@@ -1,6 +1,6 @@
 # 🔮 Antigravity Deck
 
-Full-featured workspace dashboard for [Windsurf (Antigravity)](https://codeium.com/windsurf). View, send, and manage AI conversations across multiple workspaces — with resource monitoring, source control, headless IDE, agent bridge, and remote access.
+Full-featured workspace dashboard for [Antigravity](https://codeium.com/antigravity). View, send, and manage AI conversations across multiple workspaces — with resource monitoring, source control, headless IDE, agent bridge, and remote access.
 
 ---
 
@@ -9,7 +9,7 @@ Full-featured workspace dashboard for [Windsurf (Antigravity)](https://codeium.c
 ### 💬 Chat & Conversations
 - **Full conversation history** — Bypasses the 598-step JSON API limit via hybrid JSON + binary protobuf fetching
 - **Real-time updates** — WebSocket-powered polling with adaptive rates (1s active → 5s idle)
-- **Send messages** — Compose and send directly to Windsurf cascades from the web UI
+- **Send messages** — Compose and send directly to Antigravity cascades from the web UI
 - **Image upload** — Attach images via paste or file picker for multimodal AI interactions
 - **Model selection** — Choose from available AI models (fetched live from LS API)
 - **Create & delete conversations** — Full CRUD for cascade conversations
@@ -19,8 +19,8 @@ Full-featured workspace dashboard for [Windsurf (Antigravity)](https://codeium.c
 
 ### 🖥️ Multi-Workspace Management
 - **Auto-detection** — Discovers all running LS processes, ports, and CSRF tokens automatically (Windows/macOS/Linux)
-- **Workspace switching** — Switch between multiple Windsurf workspaces seamlessly
-- **Workspace creation** — Launch new Windsurf IDE instances with auto-binding
+- **Workspace switching** — Switch between multiple Antigravity workspaces seamlessly
+- **Workspace creation** — Launch new Antigravity IDE instances with auto-binding
 - **Workspace folders** — Configure a default root directory; existing subfolders appear as available workspaces
 - **Open mode dialog** — Click any available workspace to choose: **Open with IDE** or **Open Headless**
 - **Auto-rescan** — Detects new LS instances every 10 seconds
@@ -139,7 +139,7 @@ AUTH_KEY=your-secret-key npm run dev
 
 ```
 ┌──────────────────┐   JSON + Binary Proto   ┌───────────────┐
-│  Windsurf LS     │ ◄───────────────────── │   server.js   │
+│  Antigravity LS  │ ◄───────────────────── │   server.js   │
 │  (auto-detected) │   Connect Protocol     │   :3500 API   │
 │                  │   HTTPS / HTTP         │               │
 └──────────────────┘                         └──────┬────────┘

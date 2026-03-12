@@ -491,7 +491,7 @@ export function ResourceMonitorView() {
                             Kill Antigravity IDE
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will <span className="font-medium text-red-400">terminate all Antigravity/Windsurf IDE processes</span> on this machine.
+                            This will <span className="font-medium text-red-400">terminate all Antigravity IDE processes</span> on this machine.
                             All active workspaces ({workspaceList.length}) and any running cascades will be stopped.
                             <br /><br />
                             You can relaunch the IDE from the welcome screen.

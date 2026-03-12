@@ -508,26 +508,12 @@ function setupRoutes(app) {
             });
 
             child.on('error', (err) => {
-                console.log(`[*] Antigravity not found, trying Windsurf...`);
-                const fallback = spawn('open', ['-a', 'Windsurf', folderPath], {
-                    timeout: 10000,
-                    detached: true,
-                    stdio: 'ignore'
-                });
-                fallback.on('error', (e) => console.error('[!] Failed to open IDE:', e.message));
-                fallback.unref();
+                console.error('[!] Failed to open Antigravity:', err.message);
             });
 
             child.on('exit', (code) => {
                 if (code !== 0 && code !== null) {
-                    console.log(`[*] Antigravity exited with code ${code}, trying Windsurf...`);
-                    const fallback = spawn('open', ['-a', 'Windsurf', folderPath], {
-                        timeout: 10000,
-                        detached: true,
-                        stdio: 'ignore'
-                    });
-                    fallback.on('error', (e) => console.error('[!] Failed to open IDE:', e.message));
-                    fallback.unref();
+                    console.error(`[!] Antigravity exited with code ${code}`);
                 }
             });
 

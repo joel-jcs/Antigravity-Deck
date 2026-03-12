@@ -52,7 +52,7 @@ import { SystemResourceSummary } from "./sidebar/system-resource-summary"
 interface AppSidebarProps {
     currentConvId: string | null
     conversationsVersion: number
-    /** Whether Windsurf Language Server is detected by backend */
+    /** Whether Antigravity Language Server is detected by backend */
     detected: boolean
     onSelectConversation: (convId: string | null, wsName: string) => void
     onSelectWorkspace: (wsName: string) => void

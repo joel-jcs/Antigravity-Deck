@@ -11,7 +11,7 @@ import { wsService } from './ws-service';
 
 interface WSState {
     connected: boolean;  // WebSocket connection to backend
-    detected: boolean;   // Windsurf Language Server detected by backend
+    detected: boolean;   // Antigravity Language Server detected by backend
     swapping: boolean;   // Profile swap in progress (suppress "Not Detected" UI)
     steps: Step[];
     baseIndex: number;        // server index of steps[0]
