@@ -5,7 +5,7 @@ import { authHeaders } from '@/lib/auth';
 import { getSettings, updateSettings } from '@/lib/cascade-api';
 import type { AppSettings } from '@/lib/cascade-api';
 import { cn } from '@/lib/utils';
-import { Check, X, Sparkles, CircleDot, Bot, Settings, Globe, Camera, Star, Volume2 } from 'lucide-react';
+import { Check, X, Sparkles, CircleDot, Bot, Settings, Globe, Camera, Star, Volume2, Bell } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,8 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { soundService, SETTINGS_CHANGED_EVENT } from '@/lib/sound-notification';
+import { notificationService, NOTIFICATION_SETTINGS_CHANGED } from '@/lib/notifications';
+import type { NotificationSettings } from '@/lib/notifications';
 
 interface Model {
     label: string;
@@ -56,6 +58,24 @@ export function SettingsView() {
         };
         window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
         return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+    }, []);
+
+    // === Push notification settings (localStorage, not server) ===
+    const [notiSettings, setNotiSettings] = useState<NotificationSettings>(() =>
+        notificationService?.getSettings() ?? { enabled: false, events: { cascadeComplete: true, waitingForUser: true, error: true, autoAccepted: false } }
+    );
+    const [notiPermission, setNotiPermission] = useState<NotificationPermission>(() =>
+        notificationService?.getPermission() ?? 'default'
+    );
+
+    useEffect(() => {
+        const handler = () => {
+            if (!notificationService) return;
+            setNotiSettings(notificationService.getSettings());
+            setNotiPermission(notificationService.getPermission());
+        };
+        window.addEventListener(NOTIFICATION_SETTINGS_CHANGED, handler);
+        return () => window.removeEventListener(NOTIFICATION_SETTINGS_CHANGED, handler);
     }, []);
 
     const loadAll = useCallback(async () => {
@@ -295,6 +315,83 @@ export function SettingsView() {
                                 Test Sound
                             </Button>
                         </div>
+                    </CardContent>
+                </Card>
+
+                {/* Push Notifications */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                            <Bell className="h-3.5 w-3.5" /> Push Notifications
+                        </CardTitle>
+                        <CardDescription className="text-[10px]">
+                            Get OS-level notifications when cascades complete, error, or need attention.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {/* Permission status */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs">Browser permission</span>
+                            {notiPermission === 'granted' ? (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Granted</span>
+                            ) : notiPermission === 'denied' ? (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">Blocked</span>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs h-6"
+                                    onClick={() => notificationService?.requestPermission()}
+                                >
+                                    Request Permission
+                                </Button>
+                            )}
+                        </div>
+
+                        {/* Master toggle */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs">Enable push notifications</span>
+                            <Switch
+                                checked={notiSettings.enabled}
+                                onCheckedChange={(checked) => {
+                                    notificationService?.setEnabled(checked);
+                                }}
+                                disabled={notiPermission === 'denied'}
+                            />
+                        </div>
+
+                        {/* Per-event toggles */}
+                        <div className={cn("space-y-2 border-t border-border/30 pt-3", !notiSettings.enabled && "opacity-40 pointer-events-none")}>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Notify on</span>
+                            {[
+                                { key: 'cascadeComplete' as const, label: 'Cascade complete', emoji: '✅' },
+                                { key: 'waitingForUser' as const, label: 'Waiting for approval', emoji: '⏳' },
+                                { key: 'error' as const, label: 'Error / Failed', emoji: '❌' },
+                                { key: 'autoAccepted' as const, label: 'Auto-accepted', emoji: '⚡' },
+                            ].map(({ key, label, emoji }) => (
+                                <div key={key} className="flex items-center justify-between">
+                                    <span className="text-xs flex items-center gap-1.5">
+                                        <span>{emoji}</span> {label}
+                                    </span>
+                                    <Switch
+                                        checked={notiSettings.events[key]}
+                                        onCheckedChange={(checked) => notificationService?.setEventEnabled(key, checked)}
+                                        className="scale-90"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Test button */}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7"
+                            onClick={() => notificationService?.testNotification()}
+                            disabled={!notiSettings.enabled || notiPermission !== 'granted'}
+                        >
+                            Test Notification
+                        </Button>
                     </CardContent>
                 </Card>
 

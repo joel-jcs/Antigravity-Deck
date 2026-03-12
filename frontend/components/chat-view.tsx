@@ -24,6 +24,7 @@ import {
 import { Settings, Folder, Zap, BarChart2, RefreshCcw, SendHorizontal, Square, Paperclip, GitBranch, Plus, X, ChevronDown, Activity, Download, Bell, BellOff, Rocket, ArrowDown as ArrowDownIcon, Camera, Brain, Image as ImageIcon, Star, Volume2, VolumeX } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { soundService, SETTINGS_CHANGED_EVENT } from '@/lib/sound-notification';
+import { notificationService, NOTIFICATION_SETTINGS_CHANGED } from '@/lib/notifications';
 
 // === Props ===
 interface ChatViewProps {
@@ -43,8 +44,6 @@ interface ChatViewProps {
     showAnalytics: boolean;
     onToggleAnalytics: () => void;
     onExport: () => void;
-    notificationsEnabled: boolean;
-    onToggleNotifications: () => void;
 }
 
 // === Classification ===
@@ -79,7 +78,7 @@ function generateThumbnail(base64: string, mimeType: string, maxSize = 128): Pro
 }
 
 // === Main Chat View ===
-export function ChatView({ steps, baseIndex = 0, stepCount = 0, loadingOlder = false, onLoadOlder, currentConvId, currentWorkspace, wsVersion, cascadeStatus, onCascadeCreated, onNewConversation, showTimeline, onSetShowTimeline, showAnalytics, onToggleAnalytics, onExport, notificationsEnabled, onToggleNotifications }: ChatViewProps) {
+export function ChatView({ steps, baseIndex = 0, stepCount = 0, loadingOlder = false, onLoadOlder, currentConvId, currentWorkspace, wsVersion, cascadeStatus, onCascadeCreated, onNewConversation, showTimeline, onSetShowTimeline, showAnalytics, onToggleAnalytics, onExport }: ChatViewProps) {
     const [input, setInput] = useState('');
     const [sending, setSending] = useState(false);
     // activeCascadeId: derived from currentConvId, with local override for new chats
@@ -122,6 +121,17 @@ export function ChatView({ steps, baseIndex = 0, stepCount = 0, loadingOlder = f
         };
         window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
         return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+    }, []);
+
+    // === Notification quick toggle ===
+    const [notificationsEnabled, setNotificationsEnabled] = useState(() => notificationService?.getSettings().enabled ?? false);
+
+    useEffect(() => {
+        const handler = () => {
+            setNotificationsEnabled(notificationService?.getSettings().enabled ?? false);
+        };
+        window.addEventListener(NOTIFICATION_SETTINGS_CHANGED, handler);
+        return () => window.removeEventListener(NOTIFICATION_SETTINGS_CHANGED, handler);
     }, []);
     const wsPickerRef = useRef<HTMLDivElement>(null);
     const modelPickerRef = useRef<HTMLDivElement>(null);
@@ -683,7 +693,14 @@ export function ChatView({ steps, baseIndex = 0, stepCount = 0, loadingOlder = f
                                             <Download className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
                                             Export Markdown
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={onToggleNotifications} className="cursor-pointer">
+                                        <DropdownMenuItem
+                                            onClick={() => {
+                                                const next = !notificationsEnabled;
+                                                setNotificationsEnabled(next);
+                                                notificationService?.setEnabled(next);
+                                            }}
+                                            className="cursor-pointer"
+                                        >
                                             {notificationsEnabled
                                                 ? <><BellOff className="w-3.5 h-3.5 mr-2 text-muted-foreground" /> Disable Notifications</>
                                                 : <><Bell className="w-3.5 h-3.5 mr-2 text-muted-foreground" /> Enable Notifications</>}

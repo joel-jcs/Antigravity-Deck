@@ -28,6 +28,7 @@ import { AgentLogsView } from '@/components/agent-logs-view';
 import { AgentBridgeView } from '@/components/agent-bridge-view';
 import { SourceControlView } from '@/components/source-control-view';
 import { ResourceMonitorView } from '@/components/resource-monitor-view';
+import { notificationService } from '@/lib/notifications';
 import { soundService, SETTINGS_CHANGED_EVENT } from '@/lib/sound-notification';
 
 // Lazy-load components that are hidden by default
@@ -98,7 +99,6 @@ export default function Home() {
     }
     return false;
   });
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   // === Sound notification init + mobile unlock ===
@@ -130,6 +130,11 @@ export default function Home() {
       document.removeEventListener('click', unlock);
       document.removeEventListener('touchstart', unlock);
     };
+  }, []);
+
+  // === PWA Notification service init ===
+  useEffect(() => {
+    notificationService?.init();
   }, []);
 
   // Listen for sound settings changes to update banner visibility
@@ -353,16 +358,6 @@ export default function Home() {
   const handleExport = useCallback(() => {
     if (currentConvId && steps.length > 0) exportToMarkdown(steps, currentConvId);
   }, [steps, currentConvId]);
-
-  // Notifications
-  const handleToggleNotifications = useCallback(() => {
-    setNotificationsEnabled(prev => {
-      if (!prev && 'Notification' in window && Notification.permission !== 'granted') {
-        Notification.requestPermission();
-      }
-      return !prev;
-    });
-  }, []);
 
   // Copy conversation ID
   const handleCopyId = useCallback((e: React.MouseEvent, id: string) => {
@@ -691,8 +686,6 @@ export default function Home() {
                 showAnalytics={showAnalytics}
                 onToggleAnalytics={() => setShowAnalytics(v => !v)}
                 onExport={handleExport}
-                notificationsEnabled={notificationsEnabled}
-                onToggleNotifications={handleToggleNotifications}
               />
 
               {/* Step Detail Sheet */}
