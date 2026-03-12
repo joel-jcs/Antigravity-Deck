@@ -110,10 +110,11 @@ export default function Home() {
 
     const unlock = () => {
       soundService?.unlock();
-      setSoundUnlockBanner(false);
+      // unlock() is async — sets _unlocked after resume().then()
+      // SETTINGS_CHANGED_EVENT handler below hides banner once unlocked
     };
-    document.addEventListener('click', unlock, { once: true });
-    document.addEventListener('touchstart', unlock, { once: true });
+    document.addEventListener('click', unlock);
+    document.addEventListener('touchstart', unlock);
 
     // Show unlock banner if sound is enabled but not yet unlocked (mobile)
     if (soundService.getSettings().enabled && !soundService.isUnlocked()) {

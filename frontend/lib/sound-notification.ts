@@ -260,9 +260,12 @@ class SoundNotificationService {
 
       // Replay the queued event (max 1) that arrived before unlock
       if (this.pendingEvent) {
-        const { eventId } = this.pendingEvent;
+        const { eventId, convId } = this.pendingEvent;
         this.pendingEvent = null;
-        this.playSoundNow(eventId);
+        // Re-check settings — user may have disabled sound while locked
+        if (this._settings.enabled && !SUPPRESSED_BY_DEFAULT.has(eventId)) {
+          this.playSoundNow(eventId);
+        }
       }
     }).catch(() => {
       // resume failed — keep _unlocked false so banner stays visible
