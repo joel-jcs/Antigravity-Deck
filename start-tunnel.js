@@ -34,11 +34,20 @@ function findCloudflared() {
     return null;
 }
 const CLOUDFLARED = findCloudflared();
+const QUIET = process.env.QUIET === '1' || process.argv.includes('--quiet');
 
 function log(tag, msg) {
+    if (QUIET) return;  // In quiet mode, suppress ALL process logs
     const colors = { BE: '\x1b[36m', FE: '\x1b[35m', 'TUN-BE': '\x1b[32m', 'TUN-FE': '\x1b[33m', '*': '\x1b[1m' };
     const reset = '\x1b[0m';
     console.log(`${colors[tag] || ''}[${tag}]${reset} ${msg}`);
+}
+
+// Quiet-mode progress: overwrite same line with status
+function progress(msg) {
+    if (QUIET) {
+        process.stdout.write(`\r\x1b[K  ${msg}`);
+    }
 }
 
 // Extract Cloudflare tunnel URL from process output
@@ -53,9 +62,15 @@ function extractTunnelUrl(text) {
 
 // Start a process and return it
 function startProcess(name, cmd, args, opts = {}) {
-    const proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], shell: true, ...opts });
-    proc.stdout?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log(name, l.trim())));
-    proc.stderr?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log(name, l.trim())));
+    // In quiet mode, completely discard child process output
+    const childStdio = QUIET
+        ? ['ignore', 'ignore', 'ignore']
+        : ['ignore', 'pipe', 'pipe'];
+    const proc = spawn(cmd, args, { stdio: childStdio, shell: true, ...opts });
+    if (!QUIET) {
+        proc.stdout?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log(name, l.trim())));
+        proc.stderr?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log(name, l.trim())));
+    }
     proc.on('exit', code => log(name, `exited with code ${code}`));
     return proc;
 }
@@ -76,10 +91,13 @@ async function main() {
     const crypto = require('crypto');
     const authKey = process.env.AUTH_KEY || crypto.randomBytes(16).toString('hex');
 
-    console.log('\n\x1b[1m  🚀 AntigravityChat — Starting with Cloudflare Tunnel\x1b[0m');
-    console.log(`  🔑 Auth Key: \x1b[33m${authKey}\x1b[0m\n`);
+    if (!QUIET) {
+        console.log('\n\x1b[1m  🚀 AntigravityChat — Starting with Cloudflare Tunnel\x1b[0m');
+        console.log(`  🔑 Auth Key: \x1b[33m${authKey}\x1b[0m\n`);
+    }
 
     // Step 1: Start backend on online port (quiet polling to reduce log noise)
+    progress('Starting backend...');
     log('*', `Starting backend on port ${BE_PORT}...`);
     const be = startProcess('BE', 'node', ['server.js'], {
         cwd: __dirname,
@@ -90,6 +108,7 @@ async function main() {
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Step 2: Start backend tunnel
+    progress('Starting backend tunnel...');
     log('*', 'Starting Cloudflare tunnel for backend...');
     const tunBe = spawn(CLOUDFLARED, ['tunnel', '--url', `http://localhost:${BE_PORT}`], {
         stdio: ['ignore', 'pipe', 'pipe'], shell: true
@@ -125,6 +144,7 @@ async function main() {
     log('*', `✅ Backend tunnel: ${beUrl}`);
 
     // Step 3: Start frontend with backend URL injected
+    progress('Starting frontend...');
     log('*', `Starting frontend on port ${FE_PORT}...`);
     const fe = startProcess('FE', 'npx', ['next', 'dev', '--port', String(FE_PORT)], {
         cwd: path.join(__dirname, 'frontend'),
@@ -135,6 +155,7 @@ async function main() {
     await new Promise(resolve => setTimeout(resolve, 8000));
 
     // Step 4: Start frontend tunnel
+    progress('Starting frontend tunnel...');
     log('*', 'Starting Cloudflare tunnel for frontend...');
     const tunFe = spawn(CLOUDFLARED, ['tunnel', '--url', `http://localhost:${FE_PORT}`], {
         stdio: ['ignore', 'pipe', 'pipe'], shell: true
@@ -164,6 +185,9 @@ async function main() {
 
     // Build the auto-auth URL with key embedded
     const qrUrl = feUrl ? `${feUrl}?key=${authKey}` : null;
+
+    // Clear the progress line before showing final output
+    if (QUIET) process.stdout.write('\r\x1b[K');
 
     if (feUrl) {
         console.log('\n' + '='.repeat(60));
@@ -207,11 +231,13 @@ async function main() {
     fs.writeFileSync(infoFile, info);
     log('*', `Tunnel info written to ${infoFile}`);
 
-    // Keep remaining output flowing
-    tunBe.stdout?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-BE', l.trim())));
-    tunBe.stderr?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-BE', l.trim())));
-    tunFe.stdout?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-FE', l.trim())));
-    tunFe.stderr?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-FE', l.trim())));
+    // Keep remaining output flowing (suppressed in quiet mode)
+    if (!QUIET) {
+        tunBe.stdout?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-BE', l.trim())));
+        tunBe.stderr?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-BE', l.trim())));
+        tunFe.stdout?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-FE', l.trim())));
+        tunFe.stderr?.on('data', d => d.toString().split('\n').filter(l => l.trim()).forEach(l => log('TUN-FE', l.trim())));
+    }
 
     // Graceful shutdown
     const cleanup = () => {

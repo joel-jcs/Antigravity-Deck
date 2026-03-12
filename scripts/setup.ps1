@@ -1,4 +1,4 @@
-# === Antigravity Deck — One-Command Setup (Windows PowerShell) ===
+# === Antigravity Deck -- One-Command Setup (Windows PowerShell) ===
 # Usage: irm https://raw.githubusercontent.com/tysonnbt/Antigravity-Deck/main/scripts/setup.ps1 | iex
 
 $ErrorActionPreference = "Stop"
@@ -6,8 +6,8 @@ $REPO = "https://github.com/tysonnbt/Antigravity-Deck.git"
 $DIR  = "Antigravity-Deck"
 
 Write-Host ""
-Write-Host "  🔮 Antigravity Deck — One-Command Setup" -ForegroundColor Cyan
-Write-Host "  ========================================" -ForegroundColor DarkGray
+Write-Host "  Antigravity Deck -- One-Command Setup" -ForegroundColor Cyan
+Write-Host "  ======================================" -ForegroundColor DarkGray
 Write-Host ""
 
 # --- Check prerequisites ---
@@ -18,46 +18,54 @@ try {
     $nodeVer = (node --version 2>$null)
     $major = [int]($nodeVer -replace '^v(\d+).*', '$1')
     if ($major -lt 18) {
-        Write-Host "  ⚠️  Node.js $nodeVer found, but v18+ required" -ForegroundColor Yellow
+        Write-Host "  [!] Node.js $nodeVer found, but v18+ required" -ForegroundColor Yellow
         $missing += "Node.js 18+"
-    } else {
-        Write-Host "  ✅ Node.js $nodeVer" -ForegroundColor Green
     }
-} catch {
-    Write-Host "  ❌ Node.js not found" -ForegroundColor Red
+    else {
+        Write-Host "  [OK] Node.js $nodeVer" -ForegroundColor Green
+    }
+}
+catch {
+    Write-Host "  [X] Node.js not found" -ForegroundColor Red
     $missing += "Node.js 18+"
 }
 
 # Git
 try {
     $gitVer = (git --version 2>$null)
-    Write-Host "  ✅ $gitVer" -ForegroundColor Green
-} catch {
-    Write-Host "  ❌ Git not found" -ForegroundColor Red
+    Write-Host "  [OK] $gitVer" -ForegroundColor Green
+}
+catch {
+    Write-Host "  [X] Git not found" -ForegroundColor Red
     $missing += "Git"
 }
 
-# cloudflared
+# cloudflared (optional -- only needed for npm run online)
 $cfFound = $false
 try {
     cloudflared --version 2>$null | Out-Null
     $cfFound = $true
-} catch {}
+}
+catch { }
+
 if (-not $cfFound) {
-    # Check common install paths
     $cfPaths = @(
         "C:\Program Files (x86)\cloudflared\cloudflared.exe",
         "C:\Program Files\cloudflared\cloudflared.exe"
     )
     foreach ($p in $cfPaths) {
-        if (Test-Path $p) { $cfFound = $true; break }
+        if (Test-Path $p) {
+            $cfFound = $true
+            break
+        }
     }
 }
+
 if ($cfFound) {
-    Write-Host "  ✅ cloudflared" -ForegroundColor Green
-} else {
-    Write-Host "  ❌ cloudflared not found" -ForegroundColor Red
-    $missing += "cloudflared"
+    Write-Host "  [OK] cloudflared" -ForegroundColor Green
+}
+else {
+    Write-Host "  [!] cloudflared not found (optional, needed for remote access)" -ForegroundColor Yellow
 }
 
 if ($missing.Count -gt 0) {
@@ -65,9 +73,12 @@ if ($missing.Count -gt 0) {
     Write-Host "  Missing prerequisites:" -ForegroundColor Red
     foreach ($m in $missing) {
         switch ($m) {
-            "Node.js 18+" { Write-Host "    → Install Node.js: https://nodejs.org/" -ForegroundColor Yellow }
-            "Git"         { Write-Host "    → Install Git: https://git-scm.com/" -ForegroundColor Yellow }
-            "cloudflared" { Write-Host "    → Install: winget install cloudflare.cloudflared" -ForegroundColor Yellow }
+            "Node.js 18+" {
+                Write-Host "    -> Install Node.js: https://nodejs.org/" -ForegroundColor Yellow
+            }
+            "Git" {
+                Write-Host "    -> Install Git: https://git-scm.com/" -ForegroundColor Yellow
+            }
         }
     }
     Write-Host ""
@@ -78,38 +89,264 @@ if ($missing.Count -gt 0) {
 
 Write-Host ""
 
-# --- Clone or pull ---
+# === Detect scenario ===
+$scenario = "fresh"       # fresh | up-to-date | updated
+$updatedFiles = @()
+
 if (Test-Path "$DIR\.git") {
-    Write-Host "  📂 Found existing $DIR — pulling latest..." -ForegroundColor Cyan
     Push-Location $DIR
-    git pull --ff-only
+
+    # Save current commit hash before pull
+    $hashBefore = (git rev-parse HEAD 2>$null)
+
+    Write-Host "  [i] Found existing install -- checking for updates..." -ForegroundColor Cyan
+    try {
+        git fetch origin main --quiet 2>$null
+
+        $localHash  = (git rev-parse HEAD 2>$null)
+        $remoteHash = (git rev-parse "origin/main" 2>$null)
+
+        if ($localHash -eq $remoteHash) {
+            $scenario = "up-to-date"
+            $shortHash = $localHash.Substring(0, 7)
+            Write-Host "  [OK] Already up to date ($shortHash)" -ForegroundColor Green
+        }
+        else {
+            # Count commits behind
+            $behind = (git rev-list --count "HEAD..origin/main" 2>$null)
+            Write-Host "  [i] $behind new commit(s) available -- pulling..." -ForegroundColor Yellow
+
+            git pull --ff-only 2>$null
+
+            $hashAfter = (git rev-parse HEAD 2>$null)
+
+            # List changed files between old and new
+            $updatedFiles = @(git diff --name-only $hashBefore $hashAfter 2>$null)
+            $scenario = "updated"
+
+            $shortNewHash = $hashAfter.Substring(0, 7)
+            Write-Host "  [OK] Updated to $shortNewHash" -ForegroundColor Green
+        }
+    }
+    catch {
+        Write-Host "  [!] Could not fetch updates (offline?) -- continuing with current version" -ForegroundColor Yellow
+        $scenario = "up-to-date"
+    }
+
     Pop-Location
-} else {
-    Write-Host "  📥 Cloning $REPO..." -ForegroundColor Cyan
+}
+else {
+    Write-Host "  [i] First time setup -- cloning repository..." -ForegroundColor Cyan
     git clone $REPO $DIR
+    Write-Host "  [OK] Cloned successfully" -ForegroundColor Green
 }
 
 Push-Location $DIR
 
-# --- Install dependencies ---
-Write-Host ""
-Write-Host "  📦 Installing backend dependencies..." -ForegroundColor Cyan
-npm install
+# === Smart dependency install ===
+$needBackendDeps  = $false
+$needFrontendDeps = $false
+
+switch ($scenario) {
+    "fresh" {
+        # Fresh install -- always install everything
+        $needBackendDeps  = $true
+        $needFrontendDeps = $true
+    }
+    "updated" {
+        # Only reinstall if package files changed
+        if ($updatedFiles -contains "package.json" -or $updatedFiles -contains "package-lock.json") {
+            $needBackendDeps = $true
+        }
+        $frontendPkgChanged = $updatedFiles | Where-Object {
+            $_ -like "frontend/package.json" -or $_ -like "frontend/package-lock.json"
+        }
+        if ($frontendPkgChanged) {
+            $needFrontendDeps = $true
+        }
+
+        # Show what changed
+        Write-Host ""
+        Write-Host "  Changes in this update:" -ForegroundColor Cyan
+
+        $beFiles  = @($updatedFiles | Where-Object { $_ -notlike "frontend/*" -and $_ -notlike "scripts/*" -and $_ -notlike "docs/*" -and $_ -notlike "electron/*" })
+        $feFiles  = @($updatedFiles | Where-Object { $_ -like "frontend/*" })
+        $elFiles  = @($updatedFiles | Where-Object { $_ -like "electron/*" })
+        $scFiles  = @($updatedFiles | Where-Object { $_ -like "scripts/*" })
+        $docFiles = @($updatedFiles | Where-Object { $_ -like "docs/*" })
+
+        if ($beFiles.Count -gt 0)  { Write-Host "    Backend:  $($beFiles.Count) file(s)" -ForegroundColor DarkGray }
+        if ($feFiles.Count -gt 0)  { Write-Host "    Frontend: $($feFiles.Count) file(s)" -ForegroundColor DarkGray }
+        if ($elFiles.Count -gt 0)  { Write-Host "    Electron: $($elFiles.Count) file(s)" -ForegroundColor DarkGray }
+        if ($scFiles.Count -gt 0)  { Write-Host "    Scripts:  $($scFiles.Count) file(s)" -ForegroundColor DarkGray }
+        if ($docFiles.Count -gt 0) { Write-Host "    Docs:     $($docFiles.Count) file(s)" -ForegroundColor DarkGray }
+    }
+    "up-to-date" {
+        # Check if node_modules exist (maybe user deleted them)
+        if (-not (Test-Path "node_modules")) {
+            $needBackendDeps = $true
+        }
+        if (-not (Test-Path "frontend\node_modules")) {
+            $needFrontendDeps = $true
+        }
+    }
+}
 
 Write-Host ""
-Write-Host "  📦 Installing frontend dependencies..." -ForegroundColor Cyan
-npm install --prefix frontend
+
+if ($needBackendDeps) {
+    Write-Host "  [i] Installing backend dependencies..." -ForegroundColor Cyan
+    npm install
+}
+else {
+    Write-Host "  [OK] Backend dependencies -- no changes" -ForegroundColor Green
+}
+
+if ($needFrontendDeps) {
+    Write-Host ""
+    Write-Host "  [i] Installing frontend dependencies..." -ForegroundColor Cyan
+    npm install --prefix frontend
+}
+else {
+    Write-Host "  [OK] Frontend dependencies -- no changes" -ForegroundColor Green
+}
 
 # --- Create settings.json if missing ---
 if (-not (Test-Path "settings.json")) {
     Copy-Item "settings.sample.json" "settings.json"
-    Write-Host "  📝 Created settings.json from sample" -ForegroundColor Green
+    Write-Host "  [OK] Created settings.json from sample" -ForegroundColor Green
 }
 
-# --- Start online ---
+# === Summary ===
 Write-Host ""
-Write-Host "  🚀 Starting Antigravity Deck online..." -ForegroundColor Green
-Write-Host "  (Cloudflare Tunnel + auto-generated auth key + QR code)" -ForegroundColor DarkGray
+Write-Host "  ======================================" -ForegroundColor DarkGray
+switch ($scenario) {
+    "fresh"      { Write-Host "  Fresh install complete!" -ForegroundColor Green }
+    "updated"    { Write-Host "  Updated and ready!" -ForegroundColor Green }
+    "up-to-date" { Write-Host "  Already up to date!" -ForegroundColor Green }
+}
+Write-Host "  ======================================" -ForegroundColor DarkGray
 Write-Host ""
 
-npm run online
+# === Launch ===
+if (-not $cfFound) {
+    Write-Host "  Starting Antigravity Deck locally..." -ForegroundColor Green
+    Write-Host "  Open http://localhost:3000 in your browser" -ForegroundColor DarkGray
+    Write-Host "  (Install cloudflared for remote access: winget install cloudflare.cloudflared)" -ForegroundColor DarkGray
+    Write-Host ""
+    npm run dev
+    exit 0
+}
+
+# --- Online mode: run silently, show only the clean result ---
+
+# Kill any existing processes on online ports (prevents key mismatch with stale sessions)
+Write-Host ""
+$ports = @(9807, 9808)
+foreach ($port in $ports) {
+    $existing = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    if ($existing) {
+        foreach ($conn in $existing) {
+            $procId = $conn.OwningProcess
+            $procName = (Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName
+            Write-Host "  [!] Killing stale process on port $port (PID $procId, $procName)" -ForegroundColor Yellow
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Seconds 1
+    }
+}
+
+# Remove old tunnel info so we can detect the new one
+$tunnelInfo = Join-Path (Get-Location) ".tunnel-info.txt"
+if (Test-Path $tunnelInfo) { Remove-Item $tunnelInfo -Force }
+
+# Start node start-tunnel.js completely hidden — all output goes to log file
+$logFile = Join-Path (Get-Location) ".tunnel-setup.log"
+$proc = Start-Process -FilePath "node" -ArgumentList "start-tunnel.js" `
+    -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput $logFile `
+    -RedirectStandardError (Join-Path (Get-Location) ".tunnel-setup-err.log")
+
+Write-Host ""
+Write-Host "  Setting up Cloudflare tunnels..." -ForegroundColor Cyan
+Write-Host ""
+
+# Spinner while waiting for .tunnel-info.txt (written by start-tunnel.js when ready)
+$chars = @(".", "..", "...", "....", ".....")
+$i = 0
+$timeout = 180  # 3 minutes
+$elapsed = 0
+
+while (-not (Test-Path $tunnelInfo) -and -not $proc.HasExited -and $elapsed -lt $timeout) {
+    $spin = $chars[$i % $chars.Count]
+    Write-Host "`r  Starting$spin   " -NoNewline -ForegroundColor DarkGray
+    Start-Sleep -Seconds 2
+    $elapsed += 2
+    $i++
+}
+
+Write-Host ""
+
+# Check if process died
+if ($proc.HasExited) {
+    Write-Host ""
+    Write-Host "  [X] Failed to start. Check .tunnel-setup.log for details" -ForegroundColor Red
+    Write-Host ""
+    Pop-Location
+    exit 1
+}
+
+# Check timeout
+if (-not (Test-Path $tunnelInfo)) {
+    Write-Host ""
+    Write-Host "  [X] Timed out waiting for tunnel. Check .tunnel-setup.log" -ForegroundColor Red
+    Write-Host ""
+    try { $proc.Kill() } catch {}
+    Pop-Location
+    exit 1
+}
+
+# === Read tunnel info and display cleanly ===
+$infoLines = Get-Content $tunnelInfo
+$feUrl   = ($infoLines | Where-Object { $_ -match "^Frontend:" }) -replace "^Frontend:\s*", ""
+$beUrl   = ($infoLines | Where-Object { $_ -match "^Backend:" })  -replace "^Backend:\s*",  ""
+$authKey = ($infoLines | Where-Object { $_ -match "^Auth Key:" }) -replace "^Auth Key:\s*", ""
+$qrUrl   = ($infoLines | Where-Object { $_ -match "^QR URL:" })   -replace "^QR URL:\s*",   ""
+$localFE = ($infoLines | Where-Object { $_ -match "^Local FE:" }) -replace "^Local FE:\s*", ""
+
+Clear-Host
+Write-Host ""
+Write-Host "  ============================================================" -ForegroundColor DarkGray
+Write-Host "  READY! Open this URL on any device:" -ForegroundColor Green
+Write-Host "  $feUrl" -ForegroundColor White
+Write-Host "  Key: $authKey" -ForegroundColor Yellow
+Write-Host "  ============================================================" -ForegroundColor DarkGray
+Write-Host "  Backend API: $beUrl" -ForegroundColor DarkGray
+Write-Host "  Local:       $localFE" -ForegroundColor DarkGray
+Write-Host "  ============================================================" -ForegroundColor DarkGray
+Write-Host ""
+
+# Generate QR code using qrcode-terminal (already installed as dependency)
+if ($qrUrl -and $qrUrl -ne "N/A") {
+    Write-Host "  Scan this QR code to open (auto-login):" -ForegroundColor Cyan
+    Write-Host ""
+    try {
+        node -e "require('qrcode-terminal').generate('$qrUrl',{small:true},q=>console.log(q.split('\n').map(l=>'    '+l).join('\n')))"
+    }
+    catch {}
+    Write-Host ""
+    Write-Host "  $qrUrl" -ForegroundColor Cyan
+}
+
+Write-Host ""
+Write-Host "  Press Ctrl+C to stop" -ForegroundColor DarkGray
+Write-Host ""
+
+# Keep script alive — wait for the node process
+try {
+    Wait-Process -Id $proc.Id
+}
+catch {
+    # User pressed Ctrl+C
+    try { $proc.Kill() } catch {}
+}
