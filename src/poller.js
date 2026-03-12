@@ -144,13 +144,13 @@ async function pollNow() {
                     _broadcastAll({ type: 'conversations_updated' });
 
                     // Invalidate step cache: LS takes time to finalize step content after cascade completes.
-                    // Delete cache so next ensureCached (line ~155 below, or frontend set_conversation)
-                    // re-fetches ALL steps fresh from LS with complete finalized content.
+                    // Delete cache — DO NOT re-cache immediately (LS stepCount is stale right now).
+                    // The +2s/+5s re-fetches below will re-populate with fresh finalized data.
                     const postInst = info.inst || null;
                     delete stepCache[cascadeId];
-                    console.log(`[post-done] ${cascadeId.substring(0, 8)} cache invalidated`);
+                    console.log(`[post-done] ${cascadeId.substring(0, 8)} cache invalidated — will re-fetch at +2s/+5s`);
 
-                    // Schedule backup re-fetch at +2s and +5s in case LS hasn't finalized yet
+                    // Schedule re-fetch at +2s and +5s to catch LS finalization
                     [2000, 5000].forEach(delay => {
                         setTimeout(async () => {
                             try {
@@ -161,6 +161,10 @@ async function pollNow() {
                             } catch (e) { console.log(`[post-done] re-fetch error: ${e.message}`); }
                         }, delay);
                     });
+
+                    // Skip auto-cache and polling below — cache was just invalidated,
+                    // LS data is stale, will be re-fetched by scheduled timeouts
+                    continue;
                 }
 
                 // Fast-cascade relay: first time seeing this cascade and it's already IDLE/DONE
