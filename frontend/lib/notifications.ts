@@ -89,10 +89,14 @@ class NotificationService {
     this._settings = this.loadSettings();
   }
 
-  // --- Settings ---
-
   getSettings(): NotificationSettings {
-    return JSON.parse(JSON.stringify(this._settings));
+    const perm = this.getPermission();
+    const settings = JSON.parse(JSON.stringify(this._settings));
+    // If permission is not granted, notifications are always off
+    if (perm !== 'granted') {
+      settings.enabled = false;
+    }
+    return settings;
   }
 
   getPermission(): NotificationPermission {
@@ -100,12 +104,27 @@ class NotificationService {
     return Notification.permission;
   }
 
-  setEnabled(enabled: boolean): void {
-    this._settings.enabled = enabled;
-    this.saveSettings();
-    if (enabled && this.getPermission() === 'default') {
-      this.requestPermission();
+  async setEnabled(enabled: boolean): Promise<void> {
+    if (enabled) {
+      const perm = this.getPermission();
+      if (perm === 'denied') {
+        // Can't enable — permission blocked
+        return;
+      }
+      if (perm === 'default') {
+        // Must request permission first
+        const result = await this.requestPermission();
+        if (result !== 'granted') {
+          // User didn't grant — don't enable
+          return;
+        }
+      }
+      // Permission is granted — enable
+      this._settings.enabled = true;
+    } else {
+      this._settings.enabled = false;
     }
+    this.saveSettings();
   }
 
   setEventEnabled(event: keyof NotificationSettings['events'], enabled: boolean): void {
@@ -116,6 +135,11 @@ class NotificationService {
   async requestPermission(): Promise<NotificationPermission> {
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     const result = await Notification.requestPermission();
+    // Auto-enable if permission was just granted and user wanted to enable
+    if (result === 'granted' && !this._settings.enabled) {
+      this._settings.enabled = true;
+      this.saveSettings();
+    }
     // Emit settings change to update UI (permission status changed)
     window.dispatchEvent(new Event(SETTINGS_CHANGED_EVENT));
     return result;

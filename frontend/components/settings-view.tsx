@@ -295,13 +295,7 @@ export function SettingsView() {
                                         variant="default"
                                         size="sm"
                                         className="ml-7 text-xs h-8 gap-1.5"
-                                        onClick={async () => {
-                                            await notificationService?.requestPermission();
-                                            // Auto-enable if permission was just granted
-                                            if (notificationService?.getPermission() === 'granted') {
-                                                notificationService?.setEnabled(true);
-                                            }
-                                        }}
+                                        onClick={() => notificationService?.requestPermission()}
                                     >
                                         <Bell className="h-3.5 w-3.5" />
                                         Allow Notifications
@@ -323,15 +317,7 @@ export function SettingsView() {
                             <span className="text-xs">Enable push notifications</span>
                             <Switch
                                 checked={notiSettings.enabled}
-                                onCheckedChange={(checked) => {
-                                    if (checked && notiPermission !== 'granted') {
-                                        notificationService?.requestPermission().then((p) => {
-                                            if (p === 'granted') notificationService?.setEnabled(true);
-                                        });
-                                    } else {
-                                        notificationService?.setEnabled(checked);
-                                    }
-                                }}
+                                onCheckedChange={(checked) => notificationService?.setEnabled(checked)}
                             />
                         </div>
 

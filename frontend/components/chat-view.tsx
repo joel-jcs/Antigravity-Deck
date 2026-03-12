@@ -741,11 +741,7 @@ export function ChatView({ steps, baseIndex = 0, stepCount = 0, loadingOlder = f
                                             Export Markdown
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            onClick={() => {
-                                                const next = !notificationsEnabled;
-                                                setNotificationsEnabled(next);
-                                                notificationService?.setEnabled(next);
-                                            }}
+                                            onClick={() => notificationService?.setEnabled(!notificationsEnabled)}
                                             className="cursor-pointer"
                                         >
                                             {notificationsEnabled
