@@ -149,32 +149,77 @@ function setupRoutes(app) {
         }
     });
 
-    // Kill IDE — terminate all Antigravity IDE processes
+    // Helper: get parent PID of a process (cross-platform)
+    function getParentPid(pid) {
+        const { execSync } = require('child_process');
+        const { platform } = require('./config');
+        try {
+            if (platform === 'darwin' || platform === 'linux') {
+                // ps -o ppid= -p <pid> → returns parent PID
+                const ppid = execSync(`ps -o ppid= -p ${pid}`, { encoding: 'utf8', timeout: 5000 }).trim();
+                return ppid || null;
+            } else if (platform === 'win32') {
+                // wmic is fast and reliable for getting parent PID
+                const out = execSync(`wmic process where ProcessId=${pid} get ParentProcessId /value`, { encoding: 'utf8', timeout: 5000 });
+                const match = out.match(/ParentProcessId=(\d+)/);
+                return match ? match[1] : null;
+            }
+        } catch { }
+        return null;
+    }
+
+    // Kill IDE — terminate all Antigravity IDE processes (precise PID-based)
+    // Strategy: find parent PID of each LS instance (= IDE app) → kill exactly those
     // Security: no user input, rate-limited via strictLimiter in server.js, auth-protected
     app.post('/api/kill-ide', (req, res) => {
-        const { exec } = require('child_process');
+        const { exec, execSync } = require('child_process');
         const { platform, lsInstances } = require('./config');
         console.log(`[*] Kill IDE requested (platform: ${platform}, active instances: ${lsInstances.length})`);
 
         try {
-            if (platform === 'darwin') {
-                // macOS: kill Antigravity processes (case-insensitive)
-                exec('pkill -fi "antigravity" 2>/dev/null', {
-                    timeout: 10000,
-                }, (err) => {
-                    if (err && err.code !== 1) console.error('[!] Kill IDE error:', err.message);
-                });
-            } else if (platform === 'win32') {
-                // Windows: use PowerShell to find and kill Antigravity processes
-                const path = require('path');
-                const ps = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-                const cmd = `"${ps}" -NoProfile -Command "Get-Process | Where-Object { $_.ProcessName -match 'antigravity' } | Stop-Process -Force -ErrorAction SilentlyContinue"`;
-                exec(cmd, { timeout: 10000 }, (err) => {
-                    if (err) console.error('[!] Kill IDE error:', err.message);
-                });
+            // Collect unique parent PIDs (IDE processes) from all LS instances
+            const parentPids = new Set();
+            for (const inst of lsInstances) {
+                const ppid = getParentPid(inst.pid);
+                if (ppid && ppid !== '0' && ppid !== '1') {
+                    parentPids.add(ppid);
+                    console.log(`[*] LS PID ${inst.pid} → parent IDE PID ${ppid}`);
+                }
+            }
+
+            if (parentPids.size > 0) {
+                // Kill precisely: only the IDE parent processes
+                for (const ppid of parentPids) {
+                    try {
+                        if (platform === 'win32') {
+                            // /T = kill tree (IDE + child LS), /F = force
+                            execSync(`taskkill /PID ${ppid} /T /F`, { stdio: 'ignore', timeout: 5000 });
+                        } else {
+                            // Kill the IDE app process; LS children will die with it
+                            execSync(`kill ${ppid}`, { stdio: 'ignore', timeout: 5000 });
+                        }
+                        console.log(`[*] Killed IDE PID ${ppid}`);
+                    } catch (e) {
+                        console.log(`[!] Failed to kill PID ${ppid}: ${e.message}`);
+                    }
+                }
             } else {
-                // Linux
-                exec('pkill -fi "antigravity" 2>/dev/null', { timeout: 10000 }, () => {});
+                // Fallback: no LS instances detected, use app-level kill
+                console.log('[*] No LS instances — using fallback kill');
+                if (platform === 'darwin') {
+                    // Graceful quit via AppleScript, then force kill if needed
+                    exec('osascript -e \'quit app "Antigravity"\' 2>/dev/null', { timeout: 5000 }, () => {});
+                    // Also try pkill without -f (match process NAME only, not full cmd line)
+                    setTimeout(() => {
+                        exec('pkill -i "^Antigravity" 2>/dev/null', { timeout: 5000 }, () => {});
+                    }, 2000);
+                } else if (platform === 'win32') {
+                    const path = require('path');
+                    const ps = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+                    exec(`"${ps}" -NoProfile -Command "Get-Process | Where-Object { $_.ProcessName -match '^antigravity' } | Stop-Process -Force -ErrorAction SilentlyContinue"`, { timeout: 10000 }, () => {});
+                } else {
+                    exec('pkill -i "^antigravity" 2>/dev/null', { timeout: 10000 }, () => {});
+                }
             }
 
             // Clear all LS instances since we killed the processes
@@ -188,7 +233,7 @@ function setupRoutes(app) {
             } catch { }
 
             console.log(`[*] Kill IDE: cleared ${killedCount} LS instances`);
-            res.json({ killed: true, platform, instancesCleared: killedCount });
+            res.json({ killed: true, platform, instancesCleared: killedCount, preciseKill: parentPids.size > 0, pidCount: parentPids.size });
         } catch (e) {
             console.error('[!] Kill IDE error:', e.message);
             res.status(500).json({ error: 'Failed to kill IDE' });
