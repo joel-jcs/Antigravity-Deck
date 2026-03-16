@@ -181,10 +181,10 @@ function extractLastStepContent(convId) {
             }
 
             // taskBoundary status (agent task status)
+            // Only use taskStatus — taskName often duplicates the conversation summary in the title
             const taskStatus = step.taskBoundary?.taskStatus;
-            const taskName = step.taskBoundary?.taskName;
             if (taskStatus && typeof taskStatus === 'string' && taskStatus.trim()) {
-                return taskName ? `${taskName}: ${taskStatus.trim()}`.substring(0, 120) : taskStatus.trim().substring(0, 120);
+                return taskStatus.trim().substring(0, 120);
             }
 
             // plannerResponse text (agent reply)
