@@ -17,7 +17,7 @@ function initVapid() {
         webpush.setVapidDetails(
             // Must be a valid https: URL or mailto: with real domain.
             // Apple APNs rejects 'localhost' as the email domain (RFC 8292).
-            'https://antigravity-deck.local',
+            'mailto:push@antigravity-deck.app',
             settings.vapidPublicKey,
             settings.vapidPrivateKey
         );
@@ -32,7 +32,7 @@ function initVapid() {
         vapidPrivateKey: vapidKeys.privateKey,
     });
     webpush.setVapidDetails(
-        'https://antigravity-deck.local',
+        'mailto:push@antigravity-deck.app',
         vapidKeys.publicKey,
         vapidKeys.privateKey
     );
