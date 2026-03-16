@@ -1,6 +1,7 @@
 // === Language Server Auto-Detection ===
 const { exec } = require('child_process');
 const https = require('https');
+const http2 = require('http2'); // For gRPC/HTTP2 probe (Windows LS may use pure gRPC)
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -143,24 +144,90 @@ async function detectPorts(pid) {
     });
 }
 
-// Try HTTPS first (LS typically uses self-signed cert), then fall back to HTTP
+// Probe a port using HTTP/2 (for Windows LS running pure gRPC over HTTP/2)
+// Uses Node.js built-in http2 — no extra deps needed.
+function probeGrpcHttp2(port, csrfToken) {
+    return new Promise((resolve) => {
+        let settled = false;
+        const done = (val) => { if (!settled) { settled = true; resolve(val); } };
+
+        let client;
+        try {
+            client = http2.connect(`https://127.0.0.1:${port}`, { rejectUnauthorized: false });
+        } catch { done(null); return; }
+
+        const timer = setTimeout(() => { try { client.destroy(); } catch {} done(null); }, 2500);
+        client.on('error', () => { clearTimeout(timer); done(null); });
+
+        try {
+            const req = client.request({
+                ':method': 'POST',
+                ':path': '/exa.language_server_pb.LanguageServerService/GetUserStatus',
+                'content-type': 'application/grpc+json',
+                'x-codeium-csrf-token': csrfToken,
+            });
+            req.on('response', (hdrs) => {
+                clearTimeout(timer);
+                try { client.destroy(); } catch {}
+                const status = hdrs[':status'];
+                if (status) {
+                    console.log(`[✓] API on port ${port} (gRPC/HTTP2, status=${status})`);
+                    done({ port, useTls: true, useGrpc: true });
+                } else {
+                    done(null);
+                }
+            });
+            req.on('error', () => { clearTimeout(timer); try { client.destroy(); } catch {} done(null); });
+            req.end('{}');
+        } catch { clearTimeout(timer); try { client.destroy(); } catch {} done(null); }
+    });
+}
+
+// Try Connect protocol (gRPC-Web/JSON) first, then IPv6 variants, then pure gRPC/HTTP2.
+// Fix for issue #68: Windows LS may bind ::1 (IPv6) instead of 127.0.0.1 (IPv4),
+// or use pure gRPC over HTTP/2 instead of Connect protocol.
 async function findApiPort(ports, csrfToken) {
     if (!ports || !ports.length || !csrfToken) return null;
     const headers = { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', 'X-Codeium-Csrf-Token': csrfToken };
     for (const port of ports) {
+        // 1. HTTPS Connect — IPv4 (most common on macOS/Linux)
         try {
             const agent = new https.Agent({ rejectUnauthorized: false });
             const res = await fetch(`https://127.0.0.1:${port}/exa.language_server_pb.LanguageServerService/GetUserStatus`, {
                 method: 'POST', headers, body: '{}', signal: AbortSignal.timeout(3000), agent
             });
-            if (res.ok) { console.log(`[✓] API responding on port ${port} (HTTPS)`); return { port, useTls: true }; }
-        } catch (e) { }
+            if (res.ok) { console.log(`[✓] API on port ${port} (HTTPS/IPv4)`); return { port, useTls: true }; }
+        } catch { }
+
+        // 2. HTTP Connect — localhost (may resolve to IPv4 or IPv6 depending on OS)
         try {
             const res = await fetch(`http://localhost:${port}/exa.language_server_pb.LanguageServerService/GetUserStatus`, {
                 method: 'POST', headers, body: '{}', signal: AbortSignal.timeout(3000)
             });
-            if (res.ok) { console.log(`[✓] API responding on port ${port} (HTTP)`); return { port, useTls: false }; }
-        } catch (e) { }
+            if (res.ok) { console.log(`[✓] API on port ${port} (HTTP/localhost)`); return { port, useTls: false }; }
+        } catch { }
+
+        // 3. HTTPS Connect — IPv6 loopback
+        // Fix: Windows 11 LS may bind ::1 instead of 127.0.0.1
+        try {
+            const agent = new https.Agent({ rejectUnauthorized: false });
+            const res = await fetch(`https://[::1]:${port}/exa.language_server_pb.LanguageServerService/GetUserStatus`, {
+                method: 'POST', headers, body: '{}', signal: AbortSignal.timeout(3000), agent
+            });
+            if (res.ok) { console.log(`[✓] API on port ${port} (HTTPS/IPv6)`); return { port, useTls: true }; }
+        } catch { }
+
+        // 4. HTTP Connect — IPv6 loopback
+        try {
+            const res = await fetch(`http://[::1]:${port}/exa.language_server_pb.LanguageServerService/GetUserStatus`, {
+                method: 'POST', headers, body: '{}', signal: AbortSignal.timeout(3000)
+            });
+            if (res.ok) { console.log(`[✓] API on port ${port} (HTTP/IPv6)`); return { port, useTls: false }; }
+        } catch { }
+
+        // 5. Pure gRPC/HTTP2 probe — for Windows LS using HTTP/2 instead of Connect protocol
+        const grpcResult = await probeGrpcHttp2(port, csrfToken);
+        if (grpcResult) return grpcResult;
     }
     return null;
 }
