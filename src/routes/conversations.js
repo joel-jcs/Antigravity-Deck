@@ -28,10 +28,10 @@ module.exports = function setupConversationsRoutes(app) {
 
             // Filter: only keep cascades whose workspace URI matches this instance
             if (inst.workspaceFolderUri && trajData.trajectorySummaries) {
-                const wsUri = inst.workspaceFolderUri;
+                const wsUri = inst.workspaceFolderUri.toLowerCase();
                 const filtered = {};
                 for (const [id, info] of Object.entries(trajData.trajectorySummaries)) {
-                    const cascadeWsUris = (info.workspaces || []).map(w => w.workspaceFolderAbsoluteUri);
+                    const cascadeWsUris = (info.workspaces || []).map(w => (w.workspaceFolderAbsoluteUri || '').toLowerCase());
                     if (cascadeWsUris.some(uri => uri === wsUri)) {
                         filtered[id] = info;
                     }
