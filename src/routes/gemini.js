@@ -231,4 +231,23 @@ module.exports = function (app) {
       }
     },
   );
+
+  /**
+   * DELETE /api/gemini/projects/:projectId/sessions/:sessionId
+   * Delete a specific Gemini session history file.
+   */
+  app.delete(
+    "/api/gemini/projects/:projectId/sessions/:sessionId",
+    async (req, res) => {
+      try {
+        const deleted = await discovery.deleteGeminiSession(
+          req.params.projectId,
+          req.params.sessionId,
+        );
+        res.json({ deleted });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    },
+  );
 };

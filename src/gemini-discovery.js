@@ -172,4 +172,38 @@ async function getGeminiHistory(projectId, sessionId) {
   }
 }
 
-module.exports = { getGeminiProjects, getGeminiSessions, getGeminiHistory };
+async function deleteGeminiSession(projectId, sessionId) {
+  if (!projectId || !sessionId) return false;
+  const geminiDir = path.join(os.homedir(), ".gemini");
+  const projectTmpDir = path.join(geminiDir, "tmp", projectId);
+  const chatsDir = path.join(projectTmpDir, "chats");
+
+  try {
+    const files = await fs.readdir(chatsDir);
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const fp = path.join(chatsDir, file);
+      try {
+        const content = await fs.readFile(fp, "utf8");
+        const data = JSON.parse(content);
+        if (data.sessionId === sessionId) {
+          await fs.unlink(fp);
+          return true;
+        }
+      } catch (_) {}
+    }
+  } catch (e) {
+    console.error(
+      `[Gemini Discovery] Deletion failed for ${sessionId}:`,
+      e.message,
+    );
+  }
+  return false;
+}
+
+module.exports = {
+  getGeminiProjects,
+  getGeminiSessions,
+  getGeminiHistory,
+  deleteGeminiSession,
+};

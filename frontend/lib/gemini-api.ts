@@ -121,3 +121,23 @@ export async function getGeminiHistory(
     };
   });
 }
+
+/**
+ * Delete a specific Gemini chat session history file.
+ */
+export async function deleteGeminiSession(
+  projectId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const res = await fetch(
+    `${API_BASE}/api/gemini/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    },
+  );
+  if (!res.ok)
+    throw new Error(`Failed to delete Gemini session: ${res.status}`);
+  const data = await res.json();
+  return data.deleted === true;
+}
