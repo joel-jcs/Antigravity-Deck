@@ -98,7 +98,10 @@ export function GeminiView({
   useEffect(() => {
     if (activeProject && activeSession) {
       // Use microtask to avoid synchronous setState warning
-      Promise.resolve().then(() => setLoadingHistory(true));
+      Promise.resolve().then(() => {
+        setLoadingHistory(true);
+        setMessages([]); // Clear stale messages while loading
+      });
       getGeminiHistory(activeProject, activeSession)
         .then((h) => {
           setMessages(h);
@@ -110,7 +113,8 @@ export function GeminiView({
         .catch(console.error)
         .finally(() => setLoadingHistory(false));
     } else {
-      setMessages([]);
+      // Use microtask to avoid synchronous setState warning
+      Promise.resolve().then(() => setMessages([]));
     }
   }, [activeProject, activeSession]);
 
@@ -207,7 +211,10 @@ export function GeminiView({
         .catch((err) => {
           setMessages((prev) => [
             ...prev,
-            { role: "gemini", content: `**Error fetching stats:** ${err.message}` },
+            {
+              role: "gemini",
+              content: `**Error fetching stats:** ${err.message}`,
+            },
           ]);
         })
         .finally(() => setStreaming(false));
@@ -229,7 +236,15 @@ export function GeminiView({
         },
       }),
     );
-  }, [input, streaming, ws, activeProject, activeSession, selectedModel, projects]);
+  }, [
+    input,
+    streaming,
+    ws,
+    activeProject,
+    activeSession,
+    selectedModel,
+    projects,
+  ]);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
@@ -372,7 +387,9 @@ export function GeminiView({
                           <div className='w-12 h-1.5 rounded-full bg-muted overflow-hidden'>
                             <div
                               className='h-full rounded-full bg-emerald-500/70'
-                              style={{ width: `${Math.round(remaining * 100)}%` }}
+                              style={{
+                                width: `${Math.round(remaining * 100)}%`,
+                              }}
                             />
                           </div>
                         )}
