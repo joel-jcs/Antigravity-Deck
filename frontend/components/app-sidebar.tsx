@@ -145,6 +145,7 @@ export function AppSidebar({
   const [loading, setLoading] = useState(true);
   const [openingFolder, setOpeningFolder] = useState<string | null>(null);
   const [newWsName, setNewWsName] = useState("");
+  const [customPath, setCustomPath] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [showPlugins, setShowPlugins] = useState(false);
@@ -235,12 +236,21 @@ export function AppSidebar({
 
   // Handle workspace creation
   const handleCreateWorkspace = useCallback(async () => {
-    if (!newWsName.trim()) return;
+    // Need at least a name OR a path
+    if (!newWsName.trim() && !customPath.trim()) return;
+
     setCreating(true);
     setCreateError("");
     try {
-      await createWorkspace(newWsName, headlessMode);
+      // If path is provided, use it (isName = false)
+      // If only name is provided, use name (isName = true)
+      const identifier = customPath.trim() || newWsName.trim();
+      const isName = !customPath.trim();
+
+      await createWorkspace(identifier, isName);
+
       setNewWsName("");
+      setCustomPath("");
       setShowCreateDialog(false);
       await loadAll();
       onWorkspaceCreated?.();
@@ -251,7 +261,7 @@ export function AppSidebar({
     } finally {
       setCreating(false);
     }
-  }, [newWsName, headlessMode, loadAll, onWorkspaceCreated]);
+  }, [newWsName, customPath, loadAll, onWorkspaceCreated]);
 
   // Validation — no spaces, lowercase-ish
   const nameValidationError = useMemo(() => {
@@ -790,16 +800,35 @@ export function AppSidebar({
                 placeholder='my-awesome-project'
                 value={newWsName}
                 onChange={(e) => setNewWsName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreateWorkspace()}
                 className='h-11 rounded-xl bg-muted/30 border-muted-foreground/10 focus:ring-2 focus:ring-primary/20 backdrop-blur-sm transition-all'
                 autoFocus
               />
-              {(nameValidationError || createError) && newWsName.trim() && (
-                <p className='text-xs text-destructive flex items-center gap-1.5 px-1 pr-2!'>
-                  <Circle className='h-1.5 w-1.5 fill-current' />
-                  {nameValidationError || createError}
-                </p>
-              )}
+
+              <div className='flex items-center justify-between mt-4'>
+                <div className='flex flex-col gap-1'>
+                  <label className='text-xs font-bold uppercase tracking-widest text-muted-foreground/60'>
+                    Base Path (Optional)
+                  </label>
+                  <span className='text-[10px] text-muted-foreground/40'>
+                    Path on host PC (e.g. C:\dev\project)
+                  </span>
+                </div>
+              </div>
+              <Input
+                placeholder='C:\Users\joelj\repos\...'
+                value={customPath}
+                onChange={(e) => setCustomPath(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateWorkspace()}
+                className='h-11 rounded-xl bg-muted/30 border-muted-foreground/10 focus:ring-2 focus:ring-primary/20 backdrop-blur-sm transition-all'
+              />
+
+              {(nameValidationError || createError) &&
+                (newWsName.trim() || customPath.trim()) && (
+                  <p className='text-xs text-destructive flex items-center gap-1.5 px-1 pr-2!'>
+                    <Circle className='h-1.5 w-1.5 fill-current' />
+                    {nameValidationError || createError}
+                  </p>
+                )}
             </div>
             <div className='flex items-center gap-2 p-3 rounded-xl bg-orange-500/5 border border-orange-500/10 text-[11px] text-orange-400/80 leading-relaxed'>
               <Activity className='h-3.5 w-3.5 shrink-0' />
@@ -817,7 +846,11 @@ export function AppSidebar({
             </Button>
             <Button
               onClick={handleCreateWorkspace}
-              disabled={creating || !!nameValidationError || !newWsName.trim()}
+              disabled={
+                creating ||
+                (!!nameValidationError && !customPath.trim()) ||
+                (!newWsName.trim() && !customPath.trim())
+              }
               className='rounded-xl gap-2 font-semibold shadow-lg shadow-primary/20 transition-all hover:translate-y-[-1px] active:translate-y-[0px]'
             >
               {creating ? (
