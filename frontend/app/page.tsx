@@ -19,6 +19,7 @@ import {
   X,
   Cable,
   Bot,
+  Zap,
 } from "lucide-react";
 import { API_BASE } from "@/lib/config";
 import { authHeaders } from "@/lib/auth";
@@ -36,6 +37,7 @@ import { OrchestratorView } from "@/components/orchestrator-view";
 import { SourceControlView } from "@/components/source-control-view";
 import { ResourceMonitorView } from "@/components/resource-monitor-view";
 import { GeminiView } from "@/components/gemini-view";
+import { AntigravityView } from "@/components/antigravity-view";
 import { WorkspaceOnboardModal } from "@/components/workspace-onboard-modal";
 import { notificationService } from "@/lib/notifications";
 import { initAppLogger } from "@/lib/app-logger";
@@ -210,6 +212,9 @@ export default function Home() {
   const [showGemini, setShowGemini] = useState(() =>
     getStoredValue("antigravity-show-gemini", false),
   );
+  const [showAntigravity, setShowAntigravity] = useState(() =>
+    getStoredValue("antigravity-show-antigravity", false),
+  );
   const [activeGeminiProject, setActiveGeminiProject] = useState<string | null>(
     () => getStoredValue("antigravity-active-gemini-project", null),
   );
@@ -271,6 +276,12 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("antigravity-show-gemini", JSON.stringify(showGemini));
   }, [showGemini]);
+  useEffect(() => {
+    localStorage.setItem(
+      "antigravity-show-antigravity",
+      JSON.stringify(showAntigravity),
+    );
+  }, [showAntigravity]);
   useEffect(() => {
     localStorage.setItem(
       "antigravity-active-gemini-project",
@@ -343,6 +354,7 @@ export default function Home() {
     setShowSourceControl(false);
     setShowResources(false);
     setShowGemini(false);
+    setShowAntigravity(false);
   }, []);
 
   // === Sidebar: click workspace → show conversation list ===
@@ -461,6 +473,13 @@ export default function Home() {
     resetPanels();
     setActiveWorkspace(null);
     setShowGemini(true);
+  }, [selectConversation, resetPanels]);
+
+  const handleShowAntigravity = useCallback(() => {
+    selectConversation(null);
+    resetPanels();
+    setActiveWorkspace(null);
+    setShowAntigravity(true);
   }, [selectConversation, resetPanels]);
 
   const handleSelectGeminiProject = useCallback((projectId: string | null) => {
@@ -602,6 +621,7 @@ export default function Home() {
   }, [selectConversation]);
 
   const activeView = useMemo(() => {
+    if (showAntigravity) return "antigravity";
     if (showGemini) return "gemini";
     if (showAgentHub) return "agent-hub";
     if (showOrchestrator) return "orchestrator";
@@ -622,6 +642,7 @@ export default function Home() {
     showLogs,
     showSettings,
     showAccountInfo,
+    showAntigravity,
   ]);
 
   // Current conversation info for header display
@@ -630,7 +651,10 @@ export default function Home() {
   // === Determine what to show in main panel ===
   // When LS not detected, force welcome/detection screen regardless of stored state
   const showChat =
-    detected && (currentConvId !== null || newChatMode) && !showGemini;
+    detected &&
+    (currentConvId !== null || newChatMode) &&
+    !showGemini &&
+    !showAntigravity;
   const showConversationList =
     detected &&
     !showChat &&
@@ -643,6 +667,7 @@ export default function Home() {
     !showSourceControl &&
     !showResources &&
     !showGemini &&
+    !showAntigravity &&
     activeWorkspace !== null;
   const showWelcome =
     (!detected && !showGemini) ||
@@ -656,7 +681,8 @@ export default function Home() {
       !showOrchestrator &&
       !showSourceControl &&
       !showResources &&
-      !showGemini);
+      !showGemini &&
+      !showAntigravity);
 
   return (
     <AuthGate>
@@ -679,6 +705,7 @@ export default function Home() {
           onShowSourceControl={handleShowSourceControl}
           onShowResources={handleShowResources}
           onShowGemini={handleShowGemini}
+          onShowAntigravity={handleShowAntigravity}
           onSelectGeminiProject={handleSelectGeminiProject}
           onSelectGeminiSession={handleSelectGeminiSession}
           activeGeminiProject={activeGeminiProject}
@@ -698,12 +725,18 @@ export default function Home() {
               {/* Hamburger — provided by Shadcn SidebarTrigger */}
               <SidebarTrigger className='-ml-1 w-9 h-9' />
               <div className='flex items-center gap-1.5'>
-                {showGemini ? (
+                {showAntigravity ? (
+                  <Zap className='w-4 h-4 text-primary' />
+                ) : showGemini ? (
                   <Bot className='w-4 h-4 text-primary' />
                 ) : (
                   <FolderSync className='w-4 h-4 text-muted-foreground/60' />
                 )}
-                {showGemini ? (
+                {showAntigravity ? (
+                  <span className='font-semibold text-sm'>
+                    Antigravity Core
+                  </span>
+                ) : showGemini ? (
                   <span className='font-semibold text-sm'>Gemini Portal</span>
                 ) : activeWorkspace ? (
                   <span className='font-semibold text-sm truncate max-w-[120px] sm:max-w-[200px]'>
@@ -1002,6 +1035,8 @@ export default function Home() {
               onSelectSession={handleSelectGeminiSession}
             />
           )}
+
+          {showAntigravity && <AntigravityView />}
 
           {showConversationList && (
             <ConversationList

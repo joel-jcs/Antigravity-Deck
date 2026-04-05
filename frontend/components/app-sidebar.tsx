@@ -70,6 +70,7 @@ import {
   Monitor,
   Cable,
   Workflow,
+  Zap,
 } from "lucide-react";
 
 import { WorkspaceGroup } from "./sidebar/workspace-group";
@@ -93,6 +94,7 @@ interface AppSidebarProps {
   onShowSourceControl: () => void;
   onShowResources: () => void;
   onShowGemini: () => void;
+  onShowAntigravity: () => void;
   onGoHome: () => void;
   activeView?: string | null;
   activeWorkspace: string | null;
@@ -122,6 +124,7 @@ export function AppSidebar({
   onShowSourceControl,
   onShowResources,
   onShowGemini,
+  onShowAntigravity,
   onGoHome,
   activeView,
   activeWorkspace,
@@ -333,13 +336,36 @@ export function AppSidebar({
         </SidebarHeader>
 
         <SidebarContent className='px-2'>
-          {/* Main Contexts */}
+          {/* Intelligence & AI Tools */}
           <SidebarGroup>
             <SidebarGroupLabel className='px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/50'>
-              Insights
+              Intelligence
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={onShowAntigravity}
+                    tooltip='Antigravity'
+                    className={cn(
+                      "group/menu-btn h-9 px-3 rounded-lg transition-all duration-200",
+                      activeView === "antigravity"
+                        ? "bg-primary/10 text-primary font-semibold ring-1 ring-primary/20"
+                        : "hover:bg-muted/50 text-foreground/80",
+                    )}
+                  >
+                    <Zap
+                      className={cn(
+                        "shrink-0 transition-transform group-hover/menu-btn:scale-110",
+                        activeView === "antigravity"
+                          ? "text-primary"
+                          : "text-muted-foreground/60",
+                      )}
+                    />
+                    <span className='ml-2 text-sm'>Antigravity</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={onShowGemini}
@@ -362,7 +388,17 @@ export function AppSidebar({
                     <span className='ml-2 text-sm'>Gemini</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
+          {/* Main Contexts */}
+          <SidebarGroup>
+            <SidebarGroupLabel className='px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/50'>
+              Insights
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={onShowAgentHub}
