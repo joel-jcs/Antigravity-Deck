@@ -46,15 +46,16 @@ async function _resolveWsUrl(): Promise<string> {
     try {
       const res = await fetch("/api/ws-url");
       const { wsPort } = await res.json();
-      return `ws://${hostname}:${wsPort}`;
+      return `ws://${hostname}:${wsPort}/ws/ui`;
     } catch {
-      return `ws://${hostname}:3500`;
+      return `ws://${hostname}:3500/ws/ui`;
     }
   } else {
     const tunnel = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-    return tunnel
+    const base = tunnel
       ? tunnel.replace(/^http/, "ws")
       : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+    return `${base}/ws/ui`;
   }
 }
 

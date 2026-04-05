@@ -186,9 +186,9 @@ async function runLocal() {
     // Start frontend
     progress('Starting frontend...');
     log('*', `Starting frontend on port ${FE_PORT}...`);
-    const fe = startProcess('FE', 'npx', ['next', 'start', '--port', String(FE_PORT)], {
+    const fe = startProcess('FE', 'node', ['server.js'], {
         cwd: path.join(__dirname, 'frontend'),
-        env: { ...process.env, BACKEND_PORT: String(BE_PORT), NODE_ENV: 'production' }
+        env: { ...process.env, PORT: String(FE_PORT), BACKEND_PORT: String(BE_PORT), NODE_ENV: 'production' }
     });
     await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -280,9 +280,9 @@ async function runTunnel() {
     // Step 4: Start frontend
     progress('Starting frontend...');
     log('*', `Starting frontend on port ${FE_PORT}...`);
-    const fe = startProcess('FE', 'npx', ['next', 'start', '--port', String(FE_PORT)], {
+    const fe = startProcess('FE', 'node', ['server.js'], {
         cwd: path.join(__dirname, 'frontend'),
-        env: { ...process.env, NEXT_PUBLIC_BACKEND_URL: beUrl, BACKEND_PORT: String(BE_PORT), NODE_ENV: 'production' }
+        env: { ...process.env, PORT: String(FE_PORT), NEXT_PUBLIC_BACKEND_URL: beUrl, BACKEND_PORT: String(BE_PORT), NODE_ENV: 'production' }
     });
     await new Promise(resolve => setTimeout(resolve, 3000));
 

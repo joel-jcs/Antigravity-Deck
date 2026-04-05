@@ -27,6 +27,10 @@ const geminiWss = new WebSocketServer({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
   const { pathname } = new URL(req.url, "http://localhost");
+  console.log(
+    `[BE] Upgrade request for ${pathname} (From: ${req.socket.remoteAddress})`,
+  );
+
   if (pathname === "/ws/orchestrator") {
     orchestratorWss.handleUpgrade(req, socket, head, (ws) =>
       orchestratorWss.emit("connection", ws, req),
@@ -39,11 +43,19 @@ server.on("upgrade", (req, socket, head) => {
     geminiWss.handleUpgrade(req, socket, head, (ws) =>
       geminiWss.emit("connection", ws, req),
     );
-  } else {
-    wss.handleUpgrade(req, socket, head, (ws) =>
-      wss.emit("connection", ws, req),
-    );
+  } else if (pathname === "/ws/ui" || pathname === "/" || pathname === "") {
+    // UI WebSocket handled by wss
+    console.log(`[BE] Forwarding ${pathname} upgrade to main UI WebSocket`);
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
+    });
   }
+
+  socket.on("error", (err) =>
+    console.error(`[BE] ❌ Socket error (${pathname}):`, err.message),
+  );
+  socket.on("end", () => console.log(`[BE] 🔚 Socket ended (${pathname})`));
+  socket.on("close", () => console.log(`[BE] 📦 Socket closed (${pathname})`));
 });
 
 // Security Headers - Helmet.js
@@ -244,8 +256,8 @@ if (AUTH_KEY) {
     const ip = req.ip || req.socket.remoteAddress || "";
     const isLocal =
       ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-    const allowLocalBypass = process.env.ALLOW_LOCALHOST_BYPASS === "true";
-    if (isLocal && allowLocalBypass) return next();
+    // Always bypass auth for localhost (trusted frontend proxy)
+    if (isLocal) return next();
 
     const key = req.headers["x-auth-key"] || req.query.auth_key;
 
