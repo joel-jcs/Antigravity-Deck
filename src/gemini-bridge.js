@@ -36,7 +36,12 @@ class GeminiBridge {
     }
 
     if (prompt) {
-      args.push("--prompt", prompt);
+      // Escape and wrap prompt in double quotes for safe shell execution on any platform
+      const escaped = prompt.replace(
+        /"/g,
+        os.platform() === "win32" ? '""' : '\\"',
+      );
+      args.push("--prompt", `"${escaped}"`);
     }
 
     // Always use --yolo for non-interactive server-side automation

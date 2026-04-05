@@ -8,26 +8,24 @@ export const API_BASE = "";
 // This avoids relying on NEXT_PUBLIC_ build-time vars that require a full rebuild.
 // Cached in localStorage for instant reconnect on mobile cold-reload.
 let _wsUrl: string | null = null;
-const WS_URL_CACHE_KEY = "antigravity-ws-url";
+const WS_URL_CACHE_KEY = "antigravity-ws-url-v2";
 
 export async function getWsUrl(): Promise<string> {
+  const base = await getWsBaseUrl();
+  return `${base}/ws/ui`;
+}
+
+/**
+ * Internal helper to resolve the base host for WebSockets (without path)
+ */
+export async function getWsBaseUrl(): Promise<string> {
   if (_wsUrl) return _wsUrl;
 
   const isBrowser = typeof window !== "undefined";
   if (!isBrowser) return "ws://localhost:3500";
 
-  // Try localStorage cache first (instant — no HTTP round trip on cold reload)
-  const cached = localStorage.getItem(WS_URL_CACHE_KEY);
-  if (cached) {
-    _wsUrl = cached;
-    // Refresh cache in background (non-blocking) so it stays up to date
-    _refreshWsUrlCache();
-    return _wsUrl;
-  }
-
-  // First-ever load: resolve and cache
+  // Cache temporarily disabled to purge stale paths
   _wsUrl = await _resolveWsUrl();
-  localStorage.setItem(WS_URL_CACHE_KEY, _wsUrl);
   return _wsUrl;
 }
 
@@ -46,16 +44,15 @@ async function _resolveWsUrl(): Promise<string> {
     try {
       const res = await fetch("/api/ws-url");
       const { wsPort } = await res.json();
-      return `ws://${hostname}:${wsPort}/ws/ui`;
+      return `ws://${hostname}:${wsPort}`;
     } catch {
-      return `ws://${hostname}:3500/ws/ui`;
+      return `ws://${hostname}:3500`;
     }
   } else {
     const tunnel = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-    const base = tunnel
+    return tunnel
       ? tunnel.replace(/^http/, "ws")
       : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
-    return `${base}/ws/ui`;
   }
 }
 
@@ -67,38 +64,22 @@ function _refreshWsUrlCache() {
         localStorage.setItem(WS_URL_CACHE_KEY, fresh);
       }
     })
-    .catch(() => {
-      /* ignore — cache is still valid */
-    });
+    .catch(() => {});
 }
 
-/**
- * Agent WebSocket URL — derived from UI WS URL by appending /agent path.
- * Example: ws://localhost:3500 → ws://localhost:3500/ws/agent
- */
 export async function getAgentWsUrl(): Promise<string> {
-  const uiWsUrl = await getWsUrl();
-  // getWsUrl() returns e.g. "ws://localhost:3500" (no path)
-  // Agent WS is at /ws/agent
-  return `${uiWsUrl}/ws/agent`;
+  const base = await getWsBaseUrl();
+  return `${base}/ws/agent`;
 }
 
-/**
- * Orchestrator WebSocket URL — derived from UI WS URL.
- * Example: ws://localhost:3500 → ws://localhost:3500/ws/orchestrator
- */
 export async function getOrchestratorWsUrl(): Promise<string> {
-  const uiWsUrl = await getWsUrl();
-  return `${uiWsUrl}/ws/orchestrator`;
+  const base = await getWsBaseUrl();
+  return `${base}/ws/orchestrator`;
 }
 
-/**
- * Gemini WebSocket URL — derived from UI WS URL.
- * Example: ws://localhost:3500 → ws://localhost:3500/ws/gemini
- */
 export async function getGeminiWsUrl(): Promise<string> {
-  const uiWsUrl = await getWsUrl();
-  return `${uiWsUrl}/ws/gemini`;
+  const base = await getWsBaseUrl();
+  return `${base}/ws/gemini`;
 }
 
 // Legacy sync export (used as initial value — overridden when getWsUrl() resolves)
