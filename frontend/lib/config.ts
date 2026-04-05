@@ -24,8 +24,15 @@ export async function getWsBaseUrl(): Promise<string> {
   const isBrowser = typeof window !== "undefined";
   if (!isBrowser) return "ws://localhost:3500";
 
-  // Cache temporarily disabled to purge stale paths
+  const cached = localStorage.getItem(WS_URL_CACHE_KEY);
+  if (cached) {
+    _wsUrl = cached;
+    _refreshWsUrlCache();
+    return _wsUrl;
+  }
+
   _wsUrl = await _resolveWsUrl();
+  localStorage.setItem(WS_URL_CACHE_KEY, _wsUrl);
   return _wsUrl;
 }
 

@@ -162,6 +162,19 @@ export function GeminiView({
             if (msg.sessionId && msg.sessionId !== activeSession) {
               onSelectSession(msg.sessionId);
             }
+          } else if (msg.type === "log") {
+            // Show CLI status/logs in the chat so user knows it's working
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === "gemini") {
+                return [
+                  ...prev.slice(0, -1),
+                  { ...last, content: last.content + "\n" + msg.message },
+                ];
+              } else {
+                return [...prev, { role: "gemini", content: msg.message }];
+              }
+            });
           } else if (msg.type === "error") {
             setStreaming(false);
             setMessages((prev) => [
