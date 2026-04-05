@@ -310,6 +310,9 @@ export function useOrchestratorWs() {
         }
     }, [addLog]);
 
+    // Use a ref for attemptConnect to avoid circular dependency in useCallback
+    const attemptConnectRef = useRef<(() => Promise<void>) | null>(null);
+
     const attemptConnect = useCallback(async () => {
         try {
             const wsUrl = await getOrchestratorWsUrl();
@@ -342,7 +345,9 @@ export function useOrchestratorWs() {
                     const delay = BACKOFF[retryRef.current] || 4000;
                     retryRef.current++;
                     retryTimerRef.current = setTimeout(() => {
-                        if (mountedRef.current) attemptConnect();
+                        if (mountedRef.current && attemptConnectRef.current) {
+                            attemptConnectRef.current();
+                        }
                     }, delay);
                     return 'reconnecting';
                 });
@@ -355,6 +360,10 @@ export function useOrchestratorWs() {
             setConnectionState('error');
         }
     }, [handleMessage]);
+
+    useEffect(() => {
+        attemptConnectRef.current = attemptConnect;
+    }, [attemptConnect]);
 
     const connect = useCallback(async () => {
         if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }

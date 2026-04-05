@@ -233,8 +233,8 @@ export function ResourceMonitorView() {
 
     const system = snapshot?.system
     const deckStats = snapshot?.selfStats
-    const workspaces = snapshot?.workspaces || {}
-    const historyData = snapshot?.history || []
+    const workspaces = useMemo(() => snapshot?.workspaces || {}, [snapshot])
+    const historyData = useMemo(() => snapshot?.history || [], [snapshot])
     const workspaceList = useMemo(() =>
         Object.entries(workspaces).sort((a, b) => b[1].memMB - a[1].memMB),
         [workspaces]

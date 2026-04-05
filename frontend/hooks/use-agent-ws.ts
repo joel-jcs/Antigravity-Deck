@@ -172,6 +172,9 @@ export function useAgentWs(): UseAgentWsReturn {
         }
     }, [addMessage, addSystemMessage]);
 
+    // Use a ref for attemptConnect to avoid circular dependency in useCallback
+    const attemptConnectRef = useRef<((ws_workspace: string) => Promise<void>) | null>(null);
+
     const attemptConnect = useCallback(async (ws_workspace: string) => {
         try {
             const agentUrl = await getAgentWsUrl();
@@ -207,8 +210,8 @@ export function useAgentWs(): UseAgentWsReturn {
                     const delay = BACKOFF[retryCountRef.current] || 4000;
                     retryCountRef.current++;
                     retryTimerRef.current = setTimeout(() => {
-                        if (mountedRef.current && workspaceRef.current) {
-                            attemptConnect(workspaceRef.current);
+                        if (mountedRef.current && workspaceRef.current && attemptConnectRef.current) {
+                            attemptConnectRef.current(workspaceRef.current);
                         }
                     }, delay);
                     addSystemMessage(`Connection lost. Reconnecting (${retryCountRef.current}/${MAX_RETRIES})...`);
@@ -225,6 +228,10 @@ export function useAgentWs(): UseAgentWsReturn {
             setState('error');
         }
     }, [handleMessage, addSystemMessage]);
+
+    useEffect(() => {
+        attemptConnectRef.current = attemptConnect;
+    }, [attemptConnect]);
 
     const connect = useCallback(async (ws_workspace: string) => {
         // Clean up existing connection

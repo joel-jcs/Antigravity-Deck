@@ -311,7 +311,7 @@ export function SettingsView() {
                         {notiPermission === 'granted' && (
                             <div className="flex items-center gap-2 text-[10px] text-emerald-400">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                Notifications permitted — you're all set!
+                                Notifications permitted &mdash; you&apos;re all set!
                             </div>
                         )}
 
@@ -359,7 +359,7 @@ export function SettingsView() {
 
                         {/* PWA install hint */}
                         <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-                            💡 <strong>Tip:</strong> For the best experience, install this app as a PWA — click the install icon in your browser's address bar, or use "Add to Home Screen" on mobile.
+                            💡 <strong>Tip:</strong> For the best experience, install this app as a PWA &mdash; click the install icon in your browser&apos;s address bar, or use &quot;Add to Home Screen&quot; on mobile.
                         </p>
                     </CardContent>
                 </Card>

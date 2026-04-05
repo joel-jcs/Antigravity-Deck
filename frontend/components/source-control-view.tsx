@@ -315,7 +315,7 @@ function ExplorerTab({ workspace }: { workspace: string }) {
         try {
             const data = await listWorkspaceDir(workspace, '');
             setRootEntries(data.entries);
-        } catch (e: any) { setError(e.message); }
+        } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Unknown error'); }
         finally { setLoading(false); }
     }, [workspace]);
 
@@ -541,7 +541,7 @@ function SourceControlTab({ workspace }: { workspace: string }) {
             const data = await getGitStatus(workspace);
             setFiles(data.files || []);
             if (data.error) setError(data.error);
-        } catch (e: any) { setError(e.message); }
+        } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Unknown error'); }
         finally { setLoading(false); }
     }, [workspace]);
 
@@ -873,33 +873,3 @@ export const SourceControlView = memo(function SourceControlView({
 });
 SourceControlView.displayName = 'SourceControlView';
 
-// ─── Shared: read current file ────────────────────────────────────────────────
-
-function CurrentFileView({ workspace, filePath }: { workspace: string; filePath: string }) {
-    const [content, setContent] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        setLoading(true); setError(null); setContent(null);
-        getWorkspaceFile(workspace, filePath)
-            .then(data => {
-                if (data.error && data.content === null) setError(data.error);
-                else setContent(data.content ?? '');
-            })
-            .catch(e => setError(e.message))
-            .finally(() => setLoading(false));
-    }, [workspace, filePath]);
-
-    if (loading) return <SkeletonLines />;
-    if (error) return (
-        <div className="m-4 p-3 rounded-md bg-red-500/10 border border-red-500/20 text-xs text-red-400/80 flex items-start gap-2">
-            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" /> {error}
-        </div>
-    );
-    if (content === null || content === '') return (
-        <div className="flex items-center justify-center h-full text-muted-foreground/25 text-xs italic">(empty file)</div>
-    );
-
-    return <CodeViewer content={content} ext={filePath.split('.').pop()} />;
-}
