@@ -297,25 +297,6 @@ async function runLocal() {
   });
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  // Start ngrok tunnel if configured
-  const NGROK_DOMAIN = process.env.NGROK_DOMAIN;
-  if (NGROK_DOMAIN) {
-    log("*", `Launching ngrok tunnel: ${NGROK_DOMAIN} -> ${FE_PORT}`);
-    startProcess(
-      "TUNNEL",
-      "npx",
-      [
-        "ngrok",
-        "http",
-        `--url=${NGROK_DOMAIN}`,
-        String(FE_PORT),
-        "--region=us",
-      ],
-      { cwd: __dirname },
-    );
-    feUrl = `https://${NGROK_DOMAIN}`;
-  }
-
   if (QUIET) process.stdout.write("\r\x1b[K");
 
   console.log("\n" + "=".repeat(60));
