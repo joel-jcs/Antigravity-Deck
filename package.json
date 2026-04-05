@@ -12,7 +12,10 @@
     "tunnel:be": "cloudflared tunnel --url http://localhost:3500",
     "tunnel:fe": "cloudflared tunnel --url http://localhost:3000",
     "tunnel": "npx concurrently -n TUN-BE,TUN-FE -c green,yellow \"npm run tunnel:be\" \"npm run tunnel:fe\"",
-    "online": "node start-tunnel.js"
+    "online": "node start-tunnel.js",
+    "clean": "npm run clean --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "rebuild": "npm run clean && npm run build"
   },
   "dependencies": {
     "discord.js": "^14.25.1",
@@ -30,6 +33,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
-    "ngrok": "^5.0.0-beta.2"
+    "ngrok": "^5.0.0-beta.2",
+    "rimraf": "^6.1.3"
   }
 }
