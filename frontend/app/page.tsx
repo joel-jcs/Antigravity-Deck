@@ -1029,11 +1029,13 @@ export default function Home() {
           )}
 
           {showGemini && (
-            <GeminiView
-              activeProject={activeGeminiProject}
-              activeSession={activeGeminiSession}
-              onSelectSession={handleSelectGeminiSession}
-            />
+            <div className='flex flex-col flex-1 min-h-0 overflow-hidden'>
+              <GeminiView
+                activeProject={activeGeminiProject}
+                activeSession={activeGeminiSession}
+                onSelectSession={handleSelectGeminiSession}
+              />
+            </div>
           )}
 
           {showAntigravity && <AntigravityView />}

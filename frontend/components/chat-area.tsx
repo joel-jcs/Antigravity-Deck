@@ -70,7 +70,7 @@ function UserMessage({ step, index, searchQuery, onStepClick, isBookmarked }: {
 }) {
     const { copied, copy } = useCopy();
     const content = useMemo(() => extractStepContent(step) || '', [step]);
-    const tag = step.type.replace('CORTEX_STEP_TYPE_', '').toLowerCase();
+    const tag = (step.type || '').replace('CORTEX_STEP_TYPE_', '').toLowerCase();
 
     return (
         <div className={cn(
@@ -105,7 +105,7 @@ function AgentResponse({ step, index, searchQuery, onStepClick, isBookmarked }: 
 }) {
     const { copied, copy } = useCopy();
     const content = useMemo(() => extractStepContent(step) || '', [step]);
-    const tag = step.type.replace('CORTEX_STEP_TYPE_', '').toLowerCase();
+    const tag = (step.type || '').replace('CORTEX_STEP_TYPE_', '').toLowerCase();
 
     return (
         <div className={cn(

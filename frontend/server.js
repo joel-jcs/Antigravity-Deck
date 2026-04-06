@@ -20,18 +20,15 @@ app
       const parsedUrl = parse(req.url, true);
       const { pathname } = parsedUrl;
 
-      // In DEV mode, proxy /api directly to the backend to bypass tunnel routing issues.
-      // This is skipped in PROD to honor the standard Next.js rewrites and tunnels.
-      if (dev && pathname.startsWith("/api/")) {
-        // Build isolated headers for the backend
+      // Unified API Proxy: Redirects all /api requests directly to the Express backend.
+      // Increases timeout (300s) to allow Gemini CLI to complete long thinking sessions
+      // without being cut off by the tunnel.
+      if (pathname.startsWith("/api/")) {
         const proxyHeaders = { ...req.headers };
 
-        // CRITICAL: Remove tunnel/proxy headers so the backend treats this as a purely LOCAL request.
-        // This ensures --no-auth mode works correctly on your custom tunnel and mobile.
+        // Remove tunnel/proxy headers to ensure the backend treats this as a local request (bypasses auth)
         delete proxyHeaders["x-forwarded-for"];
         delete proxyHeaders["x-real-ip"];
-
-        // Force the host header to reflect the backend instance for internal routing stability.
         proxyHeaders.host = `localhost:${BE_PORT}`;
 
         const proxyReq = http.request(
@@ -41,7 +38,7 @@ app
             path: req.url,
             method: req.method,
             headers: proxyHeaders,
-            timeout: 5000,
+            timeout: 300000, // 5 minutes (Gemini "Thinking" buffer)
           },
           (proxyRes) => {
             res.writeHead(proxyRes.statusCode, proxyRes.headers);
@@ -69,21 +66,20 @@ app
       const { pathname } = parse(req.url, true);
 
       // ONLY proxy our application WebSockets.
-      // Do NOT touch root (/) or _next paths (HMR/Turbopack)
       if (!pathname.startsWith("/ws/")) {
         return;
       }
 
       console.log(`[FE-PROXY] ⬆️  Proxying Upgrade: ${pathname}`);
 
-      const target = net.connect(BE_PORT, "127.0.0.1", () => {
-        // Build unique headers Map
+      // We use 'localhost' to match the backend's own preferred address (IPv6 or IPv4 fallback)
+      const target = net.connect(BE_PORT, "localhost", () => {
         const headerMap = new Map();
         for (let i = 0; i < req.rawHeaders.length; i += 2) {
           headerMap.set(req.rawHeaders[i].toLowerCase(), req.rawHeaders[i + 1]);
         }
 
-        headerMap.set("host", `127.0.0.1:${BE_PORT}`);
+        headerMap.set("host", `localhost:${BE_PORT}`);
         headerMap.set("connection", "Upgrade");
         headerMap.set("upgrade", "websocket");
 

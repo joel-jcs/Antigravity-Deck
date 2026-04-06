@@ -26,7 +26,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MarkdownRenderer } from "@/components/markdown-renderer";
+import { ChatArea } from "@/components/chat-area";
+import { Step } from "@/lib/types";
 import {
   getGeminiProjects,
   getGeminiHistory,
@@ -50,9 +51,7 @@ export function GeminiView({
   activeSession: string | null;
   onSelectSession: (id: string | null) => void;
 }) {
-  const [messages, setMessages] = useState<
-    { role: "user" | "gemini"; content: string }[]
-  >([]);
+  const [steps, setSteps] = useState<Step[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -61,10 +60,7 @@ export function GeminiView({
   const [projects, setProjects] = useState<GeminiProject[]>([]);
   const [quota, setQuota] = useState<GeminiQuotaBucket[]>([]);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const autoScrollRef = useRef(true);
 
   // Reset textarea height
   useEffect(() => {
@@ -73,48 +69,25 @@ export function GeminiView({
     }
   }, [input]);
 
-  // Auto-scroll logic similar to ChatView
-  useEffect(() => {
-    if (autoScrollRef.current && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
-
-  const handleScroll = useCallback(() => {
-    if (!containerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    // Distinguish user scroll from auto-scroll (roughly)
-    const atBottom = scrollHeight - scrollTop <= clientHeight + 100;
-    autoScrollRef.current = atBottom;
-  }, []);
-
   // Fetch projects and quota on mount
   useEffect(() => {
     getGeminiProjects().then(setProjects).catch(console.error);
     getGeminiQuota().then(setQuota).catch(console.error);
   }, []);
 
-  // Reset and load messages when session changes
+  // Reset and load steps when session changes
   useEffect(() => {
     if (activeProject && activeSession) {
-      // Use microtask to avoid synchronous setState warning
-      Promise.resolve().then(() => {
-        setLoadingHistory(true);
-        setMessages([]); // Clear stale messages while loading
-      });
+      setLoadingHistory(true);
+      setSteps([]); // Clear stale messages while loading
       getGeminiHistory(activeProject, activeSession)
         .then((h) => {
-          setMessages(h);
-          // Force scroll to bottom on load
-          setTimeout(() => {
-            bottomRef.current?.scrollIntoView({ behavior: "instant" });
-          }, 50);
+          setSteps(h);
         })
         .catch(console.error)
         .finally(() => setLoadingHistory(false));
     } else {
-      // Use microtask to avoid synchronous setState warning
-      Promise.resolve().then(() => setMessages([]));
+      setSteps([]);
     }
   }, [activeProject, activeSession]);
 
@@ -150,42 +123,55 @@ export function GeminiView({
         if (isTerminated) return;
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === "response") {
-            setMessages((prev) => {
+          if (msg.type === "step-update") {
+            setSteps((prev) => {
               const last = prev[prev.length - 1];
-              if (last && last.role === "gemini") {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...last, content: last.content + msg.text },
-                ];
-              } else {
-                return [...prev, { role: "gemini", content: msg.text }];
+              // Merge streaming text chunks into the last planner response bubble
+              if (
+                msg.isStreamingChunk &&
+                last &&
+                last.type === "CORTEX_STEP_TYPE_PLANNER_RESPONSE" &&
+                msg.step.type === "CORTEX_STEP_TYPE_PLANNER_RESPONSE" &&
+                !last.plannerResponse?.toolCalls
+              ) {
+                const updated = { ...last };
+                updated.plannerResponse = {
+                  ...updated.plannerResponse,
+                  modifiedResponse: (updated.plannerResponse?.modifiedResponse || "") + (msg.step.plannerResponse?.modifiedResponse || ""),
+                };
+                return [...prev.slice(0, -1), updated];
               }
+              // Otherwise append as a new step
+              return [...prev, msg.step];
             });
           } else if (msg.type === "complete") {
+            // Mark any in-progress streaming step as done
+            setSteps((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.status === "streaming") {
+                return [...prev.slice(0, -1), { ...last, status: "done" }];
+              }
+              return prev;
+            });
             setStreaming(false);
             if (msg.sessionId && msg.sessionId !== activeSessionRef.current) {
               onSelectSession(msg.sessionId);
             }
           } else if (msg.type === "log") {
-            // Show CLI status/logs in the chat so user knows it's working
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last && last.role === "gemini") {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...last, content: last.content + "\n" + msg.message },
-                ];
-              } else {
-                return [...prev, { role: "gemini", content: msg.message }];
-              }
-            });
+            setSteps((prev) => [...prev, {
+              type: "CORTEX_STEP_TYPE_EPHEMERAL_MESSAGE",
+              status: "done",
+              ephemeralMessage: { content: msg.message },
+              metadata: { createdAt: new Date().toISOString() }
+            }]);
           } else if (msg.type === "error") {
             setStreaming(false);
-            setMessages((prev) => [
-              ...prev,
-              { role: "gemini", content: `**Error:** ${msg.message}` },
-            ]);
+            setSteps((prev) => [...prev, {
+              type: "CORTEX_STEP_TYPE_ERROR_MESSAGE",
+              status: "done",
+              errorMessage: msg.message,
+              metadata: { createdAt: new Date().toISOString() }
+            }]);
           }
         } catch (err) {
           console.error("Failed to parse WebSocket message:", err);
@@ -216,22 +202,34 @@ export function GeminiView({
 
     // Intercept /stats — run via REST, not WebSocket
     if (prompt === "/stats") {
-      setMessages((prev) => [...prev, { role: "user", content: "/stats" }]);
+      setSteps((prev) => [...prev, {
+        type: "CORTEX_STEP_TYPE_USER_INPUT",
+        status: "done",
+        userInput: { userResponse: "/stats" },
+        metadata: { createdAt: new Date().toISOString() }
+      }]);
       setInput("");
       setStreaming(true);
       getGeminiStats(project?.path)
         .then((data) => {
-          setMessages((prev) => [
+          setSteps((prev) => [
             ...prev,
-            { role: "gemini", content: data.response },
+            {
+              type: "CORTEX_STEP_TYPE_PLANNER_RESPONSE",
+              status: "done",
+              plannerResponse: { modifiedResponse: data.response },
+              metadata: { createdAt: new Date().toISOString() }
+            },
           ]);
         })
         .catch((err) => {
-          setMessages((prev) => [
+          setSteps((prev) => [
             ...prev,
             {
-              role: "gemini",
-              content: `**Error fetching stats:** ${err.message}`,
+              type: "CORTEX_STEP_TYPE_ERROR_MESSAGE",
+              status: "done",
+              errorMessage: `Error fetching stats: ${err.message}`,
+              metadata: { createdAt: new Date().toISOString() }
             },
           ]);
         })
@@ -239,7 +237,12 @@ export function GeminiView({
       return;
     }
 
-    setMessages((prev) => [...prev, { role: "user", content: prompt }]);
+    setSteps((prev) => [...prev, {
+      type: "CORTEX_STEP_TYPE_USER_INPUT",
+      status: "done",
+      userInput: { userResponse: prompt },
+      metadata: { createdAt: new Date().toISOString() }
+    }]);
     setInput("");
     setStreaming(true);
 
@@ -265,101 +268,44 @@ export function GeminiView({
   ]);
 
   const handleNewChat = useCallback(() => {
-    setMessages([]);
+    setSteps([]);
     setInput("");
     onSelectSession(null);
   }, [onSelectSession]);
 
   return (
     <div className='flex-1 flex flex-col min-h-0 bg-background'>
-      {/* Main Messages Area */}
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        className='relative flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-5'
-      >
-        {loadingHistory ? (
-          <div className='flex items-center justify-center h-full'>
-            <div className='text-center space-y-4 opacity-60'>
-              <Loader2 className='h-8 w-8 text-primary animate-spin mx-auto' />
-              <p className='text-sm font-medium'>Loading chat history...</p>
+      {/* Main Messages Area - Takes up flex-1 space */}
+      {loadingHistory ? (
+        <div className='flex-1 flex items-center justify-center h-full'>
+          <div className='text-center space-y-4 opacity-60'>
+            <Loader2 className='h-8 w-8 text-primary animate-spin mx-auto' />
+            <p className='text-sm font-medium'>Loading chat history...</p>
+          </div>
+        </div>
+      ) : steps.length === 0 ? (
+        <div className='flex-1 flex items-center justify-center h-full'>
+          <div className='text-center space-y-4'>
+            <div className='flex items-center justify-center gap-3'>
+              <Rocket className='h-8 w-8 text-muted-foreground/40' />
+              <h2 className='text-xl font-semibold text-foreground/80'>
+                GeminiPortal
+              </h2>
             </div>
+            <p className='text-sm text-muted-foreground max-w-md mx-auto'>
+              {activeSession
+                ? "Loading conversation..."
+                : "Pick a Gemini project from the sidebar to start a new local session."}
+            </p>
           </div>
-        ) : messages.length === 0 ? (
-          <div className='flex items-center justify-center h-full'>
-            <div className='text-center space-y-4'>
-              <div className='flex items-center justify-center gap-3'>
-                <Rocket className='h-8 w-8 text-muted-foreground/40' />
-                <h2 className='text-xl font-semibold text-foreground/80'>
-                  GeminiPortal
-                </h2>
-              </div>
-              <p className='text-sm text-muted-foreground max-w-md mx-auto'>
-                {activeSession
-                  ? "Loading conversation..."
-                  : "Pick a Gemini project from the sidebar to start a new local session."}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className='max-w-4xl mx-auto'>
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "flex mb-4",
-                  m.role === "user" ? "justify-end" : "justify-start",
-                )}
-              >
-                <div
-                  className={cn(
-                    "max-w-[85%] group relative rounded-lg px-4 py-3 overflow-hidden min-w-0 transition-all",
-                    m.role === "user"
-                      ? "rounded-br-md bg-blue-600/20 border border-blue-500/20"
-                      : "rounded-bl-md bg-linear-to-r from-purple-950/20 to-transparent border border-purple-500/10",
-                  )}
-                >
-                  <div className='flex items-center gap-2 mb-1.5'>
-                    {m.role === "gemini" ? (
-                      <div className='w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px]'>
-                        <Bot className='h-2.5 w-2.5 text-purple-400' />
-                      </div>
-                    ) : null}
-                    <span
-                      className={cn(
-                        "text-[10px] font-bold uppercase tracking-widest",
-                        m.role === "user" ? "text-blue-400" : "text-purple-400",
-                      )}
-                    >
-                      {m.role === "user" ? "You" : "Gemini"}
-                    </span>
-                    <span className='text-[10px] text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity'>
-                      #{i + 1}
-                    </span>
-                  </div>
-
-                  <div className='text-sm leading-relaxed'>
-                    <MarkdownRenderer content={m.content} />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {streaming && (
-              <div className='flex justify-start mb-4'>
-                <div className='max-w-[85%] rounded-lg rounded-bl-md px-4 py-3 bg-linear-to-r from-purple-950/20 to-transparent border border-purple-500/10'>
-                  <div className='flex items-center gap-2 mb-2'>
-                    <Loader2 className='h-2.5 w-2.5 text-purple-400 animate-spin' />
-                    <span className='text-[10px] font-bold text-purple-400 uppercase tracking-widest'>
-                      Thinking...
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} className='h-4' />
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <ChatArea
+          steps={steps}
+          searchQuery=""
+          activeFilters={new Set()}
+        />
+      )}
 
       {/* Identical Footer / Input Bar */}
       <div className='border-t border-border bg-background/80 backdrop-blur px-2 sm:px-4 py-2 sm:py-3 sticky bottom-0 z-10'>

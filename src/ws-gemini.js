@@ -7,12 +7,13 @@ const { handleWsAuth, setupWsHeartbeat } = require("./ws-utils");
  */
 function setupGeminiWebSocket(geminiWss) {
   geminiWss.on("connection", (ws, req) => {
-    // Auth check using shared pattern (handles localhost, --no-auth, etc.)
+    console.log(
+      `[WS-Gemini] New connection attempt from ${req.socket.remoteAddress}`,
+    );
+
     if (!handleWsAuth(ws, req, "[WS-Gemini]")) return;
 
-    // Keep connection alive through tunnels
     setupWsHeartbeat(ws);
-
     console.log("[WS-Gemini] Connection authorized and heartbeat started");
 
     ws.on("message", async (raw) => {
@@ -33,17 +34,51 @@ function setupGeminiWebSocket(geminiWss) {
             );
             const proc = await bridge.spawn(msg.options);
 
-            proc.stdout.on("data", (data) => {
-              const text = data.toString();
-              // Catch session ID in the stream if it's a new chat
-              const idMatch = text.match(/Session ID: ([a-zA-Z0-9_-]+)/);
-              const discoveredId = idMatch ? idMatch[1] : null;
+            let discoveredId = null;
+            let stdoutBuffer = "";
+            let hasStreamedContent = false;
 
-              _send(ws, {
-                type: "response",
-                text: text,
-                sessionId: discoveredId || bridge.sessionId,
-              });
+            proc.stdout.on("data", (data) => {
+              stdoutBuffer += data.toString();
+              const lines = stdoutBuffer.split("\n");
+              // Keep the last partial line in the buffer
+              stdoutBuffer = lines.pop();
+
+              for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                  const event = JSON.parse(line);
+                  // Extract session ID from init event (CLI uses snake_case)
+                  if (event.type === "init" && event.session_id) {
+                    discoveredId = event.session_id;
+                  }
+                  // Stream assistant text directly as modifiedResponse so it
+                  // appears in the agent response bubble (not the processing group)
+                  if (event.type === "message" && event.role === "assistant") {
+                    hasStreamedContent = true;
+                    _send(ws, {
+                      type: "step-update",
+                      isStreamingChunk: true,
+                      step: {
+                        type: "CORTEX_STEP_TYPE_PLANNER_RESPONSE",
+                        status: "streaming",
+                        plannerResponse: { modifiedResponse: event.content || "" },
+                        metadata: { createdAt: new Date().toISOString() },
+                      },
+                      sessionId: discoveredId || bridge.sessionId,
+                    });
+                    continue;
+                  }
+                  // Skip result event if we already streamed content (it's a duplicate)
+                  if (event.type === "result" && hasStreamedContent) {
+                    continue;
+                  }
+                  _handleGeminiEvent(ws, event, discoveredId || bridge.sessionId);
+                } catch (e) {
+                  // If not JSON, treat as raw log
+                  _send(ws, { type: "log", message: line });
+                }
+              }
             });
 
             proc.stderr.on("data", (data) => {
@@ -68,7 +103,7 @@ function setupGeminiWebSocket(geminiWss) {
               _send(ws, {
                 type: "complete",
                 code,
-                sessionId: bridge.sessionId,
+                sessionId: discoveredId || bridge.sessionId,
               });
             });
             break;
@@ -101,6 +136,68 @@ function _send(ws, data) {
   if (ws.readyState === 1) {
     ws.send(JSON.stringify(data));
   }
+}
+
+/**
+ * _handleGeminiEvent
+ * Maps raw JSON events from the Gemini CLI to Antigravity Step objects.
+ */
+function _handleGeminiEvent(ws, event, sessionId) {
+  const step = {
+    type: "CORTEX_STEP_TYPE_EPHEMERAL_MESSAGE",
+    status: "done",
+    metadata: { createdAt: new Date().toISOString() },
+  };
+
+  switch (event.type) {
+    case "init":
+      return; // Handled in message loop to catch session_id
+
+    case "message":
+      return; // Handled inline in message loop (streaming chunks)
+
+    case "tool_use":
+      step.type = "CORTEX_STEP_TYPE_PLANNER_RESPONSE";
+      step.plannerResponse = {
+        toolCalls: [
+          {
+            id: event.callId || event.call_id,
+            name: event.tool || event.name,
+            argumentsJson: JSON.stringify(event.arguments || event.args || {}),
+          },
+        ],
+      };
+      break;
+
+    case "tool_result":
+      step.type = "CORTEX_STEP_TYPE_EPHEMERAL_MESSAGE";
+      step.ephemeralMessage = {
+        content: `Tool Result [${event.callId || event.call_id}]: ${JSON.stringify(event.result || event.output || "")}`,
+      };
+      break;
+
+    case "error":
+      step.type = "CORTEX_STEP_TYPE_ERROR_MESSAGE";
+      step.errorMessage = event.message || event.error || "Unknown error";
+      break;
+
+    case "result":
+      // Fallback: only reached if no message events were streamed
+      step.type = "CORTEX_STEP_TYPE_PLANNER_RESPONSE";
+      step.plannerResponse = {
+        modifiedResponse: event.response || event.content || event.text || "",
+      };
+      break;
+
+    default:
+      return;
+  }
+
+  _send(ws, {
+    type: "step-update",
+    step,
+    sessionId,
+  });
 }
 
 module.exports = { setupGeminiWebSocket };

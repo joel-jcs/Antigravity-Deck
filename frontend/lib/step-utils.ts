@@ -26,7 +26,8 @@ export const STEP_DISPLAY: Record<string, StepDisplayConfig> = {
     'CORTEX_STEP_TYPE_GENERATE_IMAGE': { role: 'tool', icon: 'ImagePlus', label: 'Generate Image', show: true },
 };
 
-export function getStepConfig(type: string): StepDisplayConfig {
+export function getStepConfig(type: string | undefined | null): StepDisplayConfig {
+    if (!type) return { role: 'system', icon: 'Settings', label: '', show: true };
     return STEP_DISPLAY[type] || { role: 'system', icon: 'Settings', label: type.replace('CORTEX_STEP_TYPE_', ''), show: true };
 }
 

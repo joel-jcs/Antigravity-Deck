@@ -1,5 +1,6 @@
 import { API_BASE } from "./config";
 import { authHeaders } from "./auth";
+import { Step } from "./types";
 
 /**
  * Gemini API Types
@@ -96,7 +97,7 @@ interface GeminiCliMessage {
 export async function getGeminiHistory(
   projectId: string,
   sessionId: string,
-): Promise<{ role: "user" | "gemini"; content: string }[]> {
+): Promise<Step[]> {
   const res = await fetch(
     `${API_BASE}/api/gemini/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`,
     { headers: authHeaders() },
@@ -104,10 +105,11 @@ export async function getGeminiHistory(
   if (!res.ok) throw new Error(`Failed to fetch Gemini history: ${res.status}`);
   const data = await res.json();
 
-  // Convert CLI message format to Deck format if needed
-  // CLI uses { type: 'user', content: [{ text: '...' }] } or { type: 'model' }
-  // Deck uses { role: 'user' | 'gemini', content: '...' }
-  return (data.messages || []).map((m: GeminiCliMessage) => {
+  // Convert CLI message format to Deck Step format
+  return (data.messages || []).flatMap((m: GeminiCliMessage) => {
+    const steps: Step[] = [];
+    const timestamp = new Date().toISOString();
+
     let content = "";
     if (Array.isArray(m.content)) {
       content = m.content.map((c: { text: string }) => c.text || "").join("\n");
@@ -115,10 +117,24 @@ export async function getGeminiHistory(
       content = (m.content as string) || "";
     }
 
-    return {
-      role: m.type === "user" ? "user" : "gemini",
-      content: content,
-    };
+    if (m.type === "user") {
+      steps.push({
+        type: "CORTEX_STEP_TYPE_USER_INPUT",
+        status: "done",
+        userInput: { userResponse: content },
+        metadata: { createdAt: timestamp }
+      });
+    } else {
+      // Model response
+      steps.push({
+        type: "CORTEX_STEP_TYPE_PLANNER_RESPONSE",
+        status: "done",
+        plannerResponse: { modifiedResponse: content },
+        metadata: { createdAt: timestamp }
+      });
+    }
+
+    return steps;
   });
 }
 
