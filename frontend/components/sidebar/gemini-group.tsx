@@ -85,9 +85,36 @@ export function GeminiGroup({
     load();
   }, []);
 
+  // 2. Auto-load sessions for active project on mount if needed
+  useEffect(() => {
+    if (
+      activeProject &&
+      !sessionsMap[activeProject] &&
+      !loadingSessions[activeProject]
+    ) {
+      const load = async () => {
+        setLoadingSessions((prev) => ({ ...prev, [activeProject]: true }));
+        try {
+          const s = await getGeminiSessions(activeProject);
+          setSessionsMap((prev) => ({ ...prev, [activeProject]: s }));
+        } catch (e) {
+          console.error(
+            "Failed to load Gemini sessions for active project:",
+            e,
+          );
+        } finally {
+          setLoadingSessions((prev) => ({ ...prev, [activeProject]: false }));
+        }
+      };
+      load();
+    }
+  }, [activeProject, sessionsMap, loadingSessions]);
+
   const toggleProject = useCallback(
     async (projectId: string) => {
-      const isExpanding = !expanded[projectId];
+      const currentlyExpanded =
+        expanded[projectId] ?? activeProject === projectId;
+      const isExpanding = !currentlyExpanded;
       setExpanded((prev) => ({ ...prev, [projectId]: isExpanding }));
 
       if (isExpanding && !sessionsMap[projectId]) {
@@ -102,7 +129,7 @@ export function GeminiGroup({
         }
       }
     },
-    [expanded, sessionsMap],
+    [expanded, sessionsMap, activeProject],
   );
 
   const confirmDelete = useCallback(async () => {
@@ -157,7 +184,7 @@ export function GeminiGroup({
         {projects.map((project) => (
           <SidebarMenuItem key={project.id}>
             <Collapsible
-              open={expanded[project.id] || activeProject === project.id}
+              open={expanded[project.id] ?? activeProject === project.id}
               onOpenChange={() => toggleProject(project.id)}
               className='group/collapsible'
             >

@@ -118,6 +118,11 @@ export function GeminiView({
     }
   }, [activeProject, activeSession]);
 
+  const activeSessionRef = useRef(activeSession);
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
   // WebSocket setup
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -159,7 +164,7 @@ export function GeminiView({
             });
           } else if (msg.type === "complete") {
             setStreaming(false);
-            if (msg.sessionId && msg.sessionId !== activeSession) {
+            if (msg.sessionId && msg.sessionId !== activeSessionRef.current) {
               onSelectSession(msg.sessionId);
             }
           } else if (msg.type === "log") {
@@ -201,7 +206,7 @@ export function GeminiView({
       isTerminated = true;
       socket?.close();
     };
-  }, [activeSession, onSelectSession]);
+  }, [onSelectSession]);
 
   const handleSend = useCallback(() => {
     if (!input.trim() || streaming || !ws) return;

@@ -47,8 +47,8 @@ class GeminiBridge {
     // Always use --yolo for non-interactive server-side automation
     args.push("--yolo");
 
-    // Plain text output — no ANSI codes in the streamed response
-    args.push("--output-format", "text");
+    // Use stream-json to get the session ID and other metadata reliably
+    args.push("--output-format", "stream-json");
 
     const executable = "gemini";
 
@@ -75,25 +75,27 @@ class GeminiBridge {
       this.process = null;
     });
 
-    // Track session ID from stdout if it's a new session
-    if (!sessionId) {
-      const idListener = (data) => {
-        const out = data.toString();
-        // The CLI prints "Session ID: <id>" on startup
-        const match = out.match(/Session ID: ([a-zA-Z0-9_-]+)/);
-        if (match) {
-          this.sessionId = match[1];
-          console.log(
-            `[Gemini Bridge] Detected new Session ID: ${this.sessionId}`,
-          );
-          this.process.stdout.removeListener("data", idListener);
+    // Track session ID from JSON stdout
+    const idListener = (data) => {
+      const out = data.toString();
+      // Since it's stream-json, we might have multiple JSON objects or partials
+      const lines = out.split("\n");
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const json = JSON.parse(line);
+          if (json.type === "init" && json.session_id) {
+            this.sessionId = json.session_id;
+            console.log(
+              `[Gemini Bridge] Detected Session ID: ${this.sessionId}`,
+            );
+          }
+        } catch (e) {
+          // Might be a partial line or non-JSON (like extension logs)
         }
-      };
-      this.process.stdout.on("data", idListener);
-    } else {
-      this.sessionId = sessionId;
-      console.log(`[Gemini Bridge] Resuming session: ${this.sessionId}`);
-    }
+      }
+    };
+    this.process.stdout.on("data", idListener);
 
     return this.process;
   }
