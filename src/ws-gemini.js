@@ -1,4 +1,5 @@
 const bridge = require("./gemini-bridge");
+const { handleWsAuth, setupWsHeartbeat } = require("./ws-utils");
 
 /**
  * setupGeminiWebSocket
@@ -6,30 +7,13 @@ const bridge = require("./gemini-bridge");
  */
 function setupGeminiWebSocket(geminiWss) {
   geminiWss.on("connection", (ws, req) => {
-    console.log(
-      `[WS-Gemini] New connection attempt from ${req.socket.remoteAddress}`,
-    );
+    // Auth check using shared pattern (handles localhost, --no-auth, etc.)
+    if (!handleWsAuth(ws, req, "[WS-Gemini]")) return;
 
-    // Auth check (matches Antigravity Deck's pattern)
-    const authKey = process.env.AUTH_KEY || "";
-    if (authKey) {
-      const url = new URL(req.url, "http://localhost");
-      const key = url.searchParams.get("auth_key");
+    // Keep connection alive through tunnels
+    setupWsHeartbeat(ws);
 
-      if (!key) {
-        console.warn("[WS-Gemini] Rejecting connection: No auth_key provided");
-        ws.close(4401, "Unauthorized");
-        return;
-      }
-
-      if (key !== authKey) {
-        console.warn("[WS-Gemini] Rejecting connection: Invalid auth_key");
-        ws.close(4401, "Unauthorized");
-        return;
-      }
-    }
-
-    console.log("[WS-Gemini] Connection authorized");
+    console.log("[WS-Gemini] Connection authorized and heartbeat started");
 
     ws.on("message", async (raw) => {
       let msg;

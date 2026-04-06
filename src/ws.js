@@ -8,43 +8,17 @@ const viewers = new Set();
 const globalViewers = new Set(); // clients that want ALL events (Live Logs)
 const clientConvMap = new Map(); // Map<ws, convId> — per-client conversation tracking
 
-// Heartbeat to keep connections alive (e.g. through ngrok)
-setInterval(() => {
-  viewers.forEach((ws) => {
-    if (ws.isAlive === false) return ws.terminate();
-    ws.isAlive = false;
-    ws.ping();
-  });
-}, 30000);
+const { handleWsAuth, setupWsHeartbeat } = require("./ws-utils");
 
 function setupWebSocket(wss, { ensureCached, stepCache }) {
   wss.on("connection", (ws, req) => {
-    const ip = req.socket.remoteAddress || "";
-    const isLocal =
-      ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-    console.log(`[WS-UI] Connection from ${ip} (isLocal: ${isLocal})`);
+    // Auth check (handles localhost, --no-auth, etc.)
+    if (!handleWsAuth(ws, req, "[WS-UI]")) return;
 
-    // Auth check for WebSocket (skip for localhost connections — same policy as HTTP)
-    const authKey = process.env.AUTH_KEY || "";
-    if (authKey) {
-      if (!isLocal) {
-        const url = new URL(req.url, "http://localhost");
-        const key = url.searchParams.get("auth_key");
-        console.log(`[WS-UI] Non-local check: Key provided? ${!!key}`);
-        if (key !== authKey) {
-          console.warn(`[WS-UI] Auth failed for ${ip}`);
-          ws.close(4401, "Unauthorized");
-          return;
-        }
-      } else {
-        console.log(`[WS-UI] Bypassing auth for local connection`);
-      }
-    }
+    // Keep connection alive through tunnels
+    setupWsHeartbeat(ws);
+
     viewers.add(ws);
-    ws.isAlive = true;
-    ws.on("pong", () => {
-      ws.isAlive = true;
-    });
 
     ws.send(
       JSON.stringify({
