@@ -6,18 +6,63 @@ const { parse } = require("url");
 const next = require("next");
 const net = require("net");
 
-const PORT = parseInt(process.env.PORT || "9808");
-const BE_PORT = parseInt(process.env.BACKEND_PORT || "9807");
 const dev = process.env.NODE_ENV !== "production";
+const PORT = parseInt(process.env.PORT || (dev ? "3000" : "9808"));
+const BE_PORT = parseInt(process.env.BACKEND_PORT || (dev ? "3500" : "9807"));
 
-const app = next({ dev });
+const app = next({ dev, dir: __dirname });
 const handle = app.getRequestHandler();
 
 app
   .prepare()
   .then(() => {
     const server = http.createServer((req, res) => {
-      handle(req, res, parse(req.url, true));
+      const parsedUrl = parse(req.url, true);
+      const { pathname } = parsedUrl;
+
+      // In DEV mode, proxy /api directly to the backend to bypass tunnel routing issues.
+      // This is skipped in PROD to honor the standard Next.js rewrites and tunnels.
+      if (dev && pathname.startsWith("/api/")) {
+        // Build isolated headers for the backend
+        const proxyHeaders = { ...req.headers };
+
+        // CRITICAL: Remove tunnel/proxy headers so the backend treats this as a purely LOCAL request.
+        // This ensures --no-auth mode works correctly on your custom tunnel and mobile.
+        delete proxyHeaders["x-forwarded-for"];
+        delete proxyHeaders["x-real-ip"];
+
+        // Force the host header to reflect the backend instance for internal routing stability.
+        proxyHeaders.host = `localhost:${BE_PORT}`;
+
+        const proxyReq = http.request(
+          {
+            hostname: "localhost",
+            port: BE_PORT,
+            path: req.url,
+            method: req.method,
+            headers: proxyHeaders,
+            timeout: 5000,
+          },
+          (proxyRes) => {
+            res.writeHead(proxyRes.statusCode, proxyRes.headers);
+            proxyRes.pipe(res);
+          },
+        );
+
+        proxyReq.on("error", (e) => {
+          console.error(`[FE-PROXY] ❌ API error (${pathname}): ${e.message}`);
+          res.statusCode = 502;
+          res.setHeader("Content-Type", "text/plain");
+          res.end(
+            `Frontend Proxy: Bad Gateway (Target: localhost:${BE_PORT}, Error: ${e.message})`,
+          );
+        });
+
+        req.pipe(proxyReq);
+        return;
+      }
+
+      handle(req, res, parsedUrl);
     });
 
     server.on("upgrade", (req, socket, head) => {

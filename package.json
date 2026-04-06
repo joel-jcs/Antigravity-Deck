@@ -6,7 +6,7 @@
   "scripts": {
     "setup": "npm install && npm install --prefix frontend && node -e \"const fs=require('fs');if(!fs.existsSync('settings.json'))fs.copyFileSync('settings.sample.json','settings.json');console.log('✅ Setup complete! Run: npm run dev')\"",
     "start": "node server.js",
-    "dev": "npx concurrently -n BE,FE -c cyan,magenta \"node --watch server.js --port 3500 --no-auth\" \"npm run dev --prefix frontend\"",
+    "dev": "npx concurrently -n BE,FE -c cyan,magenta \"node --watch server.js --port 3500 --no-auth\" \"SET NODE_ENV=development&& SET BACKEND_PORT=3500&& SET PORT=3000&& node frontend/server.js\"",
     "prod": "node start-tunnel.js --local",
     "prod:remote": "npm run prod",
     "server": "node --watch server.js --port 3500",
